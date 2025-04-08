@@ -480,11 +480,252 @@ const TrafficVisualizations: React.FC<TrafficVisualizationsProps> = ({
             </Card>
           </div>
 
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>Thống kê giao diện</CardTitle>
+                  <CardDescription>Phân phối lưu lượng qua các giao diện</CardDescription>
+                </div>
+                <div className="text-blue-600 cursor-pointer">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
+                  </svg>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={400}>
+                  <PieChart>
+                    <Pie
+                      data={[
+                        { name: "WAN", value: 75 },
+                        { name: "vlan99", value: 15 },
+                        { name: "vlan88", value: 10 }
+                      ]}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={80}
+                      outerRadius={150}
+                      fill="#8884d8"
+                      dataKey="value"
+                      nameKey="name"
+                      label={false}
+                    >
+                      {[
+                        { name: "WAN", value: 75, color: "#0088FE" },
+                        { name: "vlan99", value: 15, color: "#00C49F" },
+                        { name: "vlan88", value: 10, color: "#FF8042" }
+                      ].map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(value) => [`${value}%`, '']} />
+                    <Legend verticalAlign="bottom" />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>Firewall</CardTitle>
+                  <CardDescription>Lọc lưu lượng bởi tường lửa</CardDescription>
+                </div>
+                <div className="text-blue-600 cursor-pointer">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
+                  </svg>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={400}>
+                  <PieChart>
+                    <Pie
+                      data={[
+                        { name: "Default deny / state violation rule", value: 100 }
+                      ]}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={80}
+                      outerRadius={150}
+                      fill="#90CAF9"
+                      dataKey="value"
+                      nameKey="name"
+                      label={false}
+                    >
+                      <Cell fill="#90CAF9" />
+                    </Pie>
+                    <Tooltip formatter={(value) => [`${value}%`, '']} />
+                    <Legend verticalAlign="bottom" />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>Services</CardTitle>
+                  <CardDescription>Trạng thái các dịch vụ hệ thống</CardDescription>
+                </div>
+                <div className="text-blue-600 cursor-pointer">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
+                  </svg>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <span>System Configuration Daemon</span>
+                    <div className="flex items-center">
+                      <div className="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                  </div>
+                  
+                  <div className="flex justify-between items-center">
+                    <span>Cron</span>
+                    <div className="flex items-center">
+                      <div className="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                  </div>
+                  
+                  <div className="flex justify-between items-center">
+                    <span>DHCP4 Server</span>
+                    <div className="flex items-center">
+                      <div className="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                  </div>
+                  
+                  <div className="flex justify-between items-center">
+                    <span>Users and Groups</span>
+                    <div className="flex items-center">
+                      <div className="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                  </div>
+                  
+                  <div className="flex justify-between items-center">
+                    <span>Network Time Daemon</span>
+                    <div className="flex items-center">
+                      <div className="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>Traffic Graph</CardTitle>
+                  <CardDescription>Biểu đồ lưu lượng mạng theo thời gian thực</CardDescription>
+                </div>
+                <div className="text-blue-600 cursor-pointer">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
+                  </svg>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-sm font-medium mb-1">Traffic In</p>
+                    <ResponsiveContainer width="100%" height={120}>
+                      <AreaChart
+                        data={[
+                          { time: '1', value: 5 },
+                          { time: '2', value: 10 },
+                          { time: '3', value: 7 },
+                          { time: '4', value: 15 },
+                          { time: '5', value: 12 },
+                          { time: '6', value: 28 },
+                          { time: '7', value: 5 },
+                          { time: '8', value: 10 },
+                          { time: '9', value: 7 },
+                          { time: '10', value: 35 },
+                          { time: '11', value: 18 },
+                          { time: '12', value: 5 }
+                        ]}
+                        margin={{ top: 0, right: 0, left: 0, bottom: 0 }}
+                      >
+                        <defs>
+                          <linearGradient id="colorTrafficIn" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#0088FE" stopOpacity={0.8}/>
+                            <stop offset="95%" stopColor="#0088FE" stopOpacity={0.1}/>
+                          </linearGradient>
+                        </defs>
+                        <YAxis domain={[0, 40]} hide />
+                        <Area type="monotone" dataKey="value" stroke="#0088FE" fillOpacity={1} fill="url(#colorTrafficIn)" />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                  
+                  <div>
+                    <p className="text-sm font-medium mb-1">Traffic Out</p>
+                    <ResponsiveContainer width="100%" height={120}>
+                      <AreaChart
+                        data={[
+                          { time: '1', value: 8 },
+                          { time: '2', value: 12 },
+                          { time: '3', value: 5 },
+                          { time: '4', value: 18 },
+                          { time: '5', value: 16 },
+                          { time: '6', value: 8 },
+                          { time: '7', value: 10 },
+                          { time: '8', value: 14 },
+                          { time: '9', value: 24 },
+                          { time: '10', value: 20 },
+                          { time: '11', value: 15 },
+                          { time: '12', value: 8 }
+                        ]}
+                        margin={{ top: 0, right: 0, left: 0, bottom: 0 }}
+                      >
+                        <defs>
+                          <linearGradient id="colorTrafficOut" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#00C49F" stopOpacity={0.8}/>
+                            <stop offset="95%" stopColor="#00C49F" stopOpacity={0.1}/>
+                          </linearGradient>
+                        </defs>
+                        <YAxis domain={[0, 40]} hide />
+                        <Area type="monotone" dataKey="value" stroke="#00C49F" fillOpacity={1} fill="url(#colorTrafficOut)" />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
           <div className="grid grid-cols-1 gap-6 mb-6">
             <Card>
-              <CardHeader>
-                <CardTitle>Phát Hiện Xâm Nhập (IDS)</CardTitle>
-                <CardDescription>Các cuộc tấn công tiềm năng được phát hiện bởi AI</CardDescription>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>Phát Hiện Xâm Nhập (IDS)</CardTitle>
+                  <CardDescription>Các cuộc tấn công tiềm năng được phát hiện bởi AI</CardDescription>
+                </div>
+                <div className="text-blue-600 cursor-pointer">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
+                  </svg>
+                </div>
               </CardHeader>
               <CardContent>
                 {anomalyData && anomalyData.data && anomalyData.data.length > 0 ? (
