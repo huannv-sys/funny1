@@ -1,9 +1,80 @@
 import { getMacVendor } from './device-identification';
+import { networkDevices } from '../../shared/schema';
+import { db } from '../db';
+import { eq } from 'drizzle-orm';
 
 interface DeviceClassification {
   deviceType: string;
   deviceRole?: string;
   confidenceScore?: number;
+}
+
+// Function to classify a device based on its ID from the database
+export async function classifyDevice(deviceId: number): Promise<string> {
+  try {
+    const [device] = await db.select()
+      .from(networkDevices)
+      .where(eq(networkDevices.id, deviceId));
+    
+    if (!device) {
+      return DeviceRole.Unknown;
+    }
+    
+    // Classify based on MAC address, IP, and vendor info
+    const classification = await classifyDeviceByDetails(
+      device.macAddress, 
+      device.ipAddress, 
+      device.vendor || undefined
+    );
+    
+    return classification.deviceRole || DeviceRole.Unknown;
+  } catch (error) {
+    console.error("Error classifying device by ID:", error);
+    return DeviceRole.Unknown;
+  }
+}
+
+// Add a wrapper function to keep compatibility with previous code
+export async function reclassifyAllDevices(): Promise<number> {
+  try {
+    const devices = await db.select().from(networkDevices);
+    let updatedCount = 0;
+    
+    for (const device of devices) {
+      const role = await classifyDevice(device.id);
+      
+      // Update the device role in the database
+      await db.update(networkDevices)
+        .set({ deviceRole: role })
+        .where(eq(networkDevices.id, device.id));
+        
+      updatedCount++;
+    }
+    
+    return updatedCount;
+  } catch (error) {
+    console.error("Error reclassifying devices:", error);
+    return 0;
+  }
+}
+
+// Get the recommended monitoring methods for a device role
+export function getMonitoringMethodsForRole(role: string): string[] {
+  const monitoringMethodsByRole: Record<string, string[]> = {
+    [DeviceRole.Router]: ['SNMP', 'API', 'Ping'],
+    [DeviceRole.Network]: ['SNMP', 'Ping'],
+    [DeviceRole.Server]: ['SNMP', 'WMI', 'Ping', 'HTTP'],
+    [DeviceRole.Endpoint]: ['Ping', 'ARP', 'HTTP'],
+    [DeviceRole.Mobile]: ['Ping', 'ARP'],
+    [DeviceRole.IoT]: ['Ping', 'ARP'],
+    [DeviceRole.Printer]: ['SNMP', 'Ping'],
+    [DeviceRole.Security]: ['SNMP', 'Ping', 'RTSP'],
+    [DeviceRole.Multimedia]: ['Ping', 'UPnP'],
+    [DeviceRole.VoIP]: ['SIP', 'Ping'],
+    [DeviceRole.Unknown]: ['Ping', 'ARP'],
+  };
+  
+  return monitoringMethodsByRole[role] || monitoringMethodsByRole[DeviceRole.Unknown];
 }
 
 // Danh sách các loại thiết bị
@@ -151,7 +222,7 @@ const deviceTypeToRoleMap: Record<string, DeviceRole> = {
  * @param vendor Tên nhà sản xuất (nếu đã biết)
  * @returns Kết quả phân loại thiết bị
  */
-export async function classifyDevice(macAddress: string, ipAddress: string, vendor?: string): Promise<DeviceClassification> {
+export async function classifyDeviceByDetails(macAddress: string, ipAddress: string, vendor?: string): Promise<DeviceClassification> {
   // Nếu không cung cấp vendor, tra cứu từ MAC address
   if (!vendor) {
     vendor = await getMacVendor(macAddress);

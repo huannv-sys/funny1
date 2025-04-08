@@ -11,7 +11,7 @@ import { alertSeverity } from "@shared/schema";
 import { wirelessService } from "./wireless";
 import { capsmanService } from "./capsman";
 import { deviceInfoService } from "./device_info";
-import { ArpEntry, DhcpLease } from '../mikrotik-api-types';
+import { ArpEntry, DhcpLease, NetworkDeviceDetails } from '../mikrotik-api-types';
 
 // Sử dụng thư viện node-routeros để kết nối với RouterOS
 import * as RouterOS from 'node-routeros';
@@ -276,6 +276,184 @@ export class MikrotikService {
   private clients: Map<number, MikrotikClient> = new Map();
   
   /**
+   * Lấy danh sách các bản ghi ARP từ thiết bị MikroTik
+   * @param device Device object or deviceId
+   * @returns Array of ARP entries
+   */
+  async getArpEntries(device: number | Device): Promise<ArpEntry[]> {
+    try {
+      const deviceId = typeof device === 'number' ? device : device.id;
+      let client = this.clients.get(deviceId);
+      
+      if (!client) {
+        const connected = await this.connectToDevice(deviceId);
+        if (!connected) {
+          console.error(`Could not connect to device ${deviceId} for ARP entries`);
+          return [];
+        }
+        client = this.clients.get(deviceId);
+      }
+      
+      if (!client) {
+        console.error(`Still could not get client for device ${deviceId}`);
+        return [];
+      }
+      
+      const arpEntries = await client.executeCommand('/ip/arp/print');
+      
+      if (!Array.isArray(arpEntries)) {
+        console.error('Invalid ARP table data:', arpEntries);
+        return [];
+      }
+      
+      // Map the RouterOS ARP entries to our ArpEntry type
+      return arpEntries.map((entry: any): ArpEntry => ({
+        id: entry['.id'] || '',
+        address: entry.address || '',
+        macAddress: entry['mac-address'] || '',
+        interface: entry.interface || '',
+        complete: entry.complete || '',
+        disabled: entry.disabled === 'true' ? 'true' : 'false',
+        dynamic: entry.dynamic === 'true' ? 'true' : 'false',
+        invalid: entry.invalid === 'true' ? 'true' : 'false',
+        deviceId: deviceId
+      }));
+    } catch (error) {
+      console.error(`Error in getArpEntries:`, error);
+      return [];
+    }
+  }
+  
+  /**
+   * Lấy danh sách các bản ghi DHCP lease từ thiết bị MikroTik
+   * @param device Device object or deviceId
+   * @returns Array of DHCP leases 
+   */
+  async getDhcpLeases(device: number | Device): Promise<DhcpLease[]> {
+    try {
+      const deviceId = typeof device === 'number' ? device : device.id;
+      let client = this.clients.get(deviceId);
+      
+      if (!client) {
+        const connected = await this.connectToDevice(deviceId);
+        if (!connected) {
+          console.error(`Could not connect to device ${deviceId} for DHCP leases`);
+          return [];
+        }
+        client = this.clients.get(deviceId);
+      }
+      
+      if (!client) {
+        console.error(`Still could not get client for device ${deviceId}`);
+        return [];
+      }
+      
+      const leases = await client.executeCommand('/ip/dhcp-server/lease/print');
+      
+      if (!Array.isArray(leases)) {
+        console.error('Invalid DHCP leases data:', leases);
+        return [];
+      }
+      
+      // Map the RouterOS DHCP leases to our DhcpLease type
+      return leases.map((lease: any): DhcpLease => ({
+        id: lease['.id'] || '',
+        address: lease.address || '',
+        macAddress: lease['mac-address'] || '',
+        clientId: lease['client-id'],
+        hostName: lease['host-name'],
+        comment: lease.comment,
+        status: lease.status || 'unknown',
+        lastSeen: lease['last-seen'] ? new Date() : undefined,
+        server: lease.server,
+        disabled: lease.disabled === 'true',
+        dynamic: lease.dynamic === 'true',
+        blocked: lease.blocked === 'true',
+        radius: lease.radius === 'true',
+        expiresAfter: lease['expires-after'],
+        activeAddress: lease['active-address'],
+        activeServerId: lease['active-server'],
+        agentCircuitId: lease['agent-circuit-id'],
+        agentRemoteId: lease['agent-remote-id'],
+        deviceId: deviceId
+      }));
+    } catch (error) {
+      console.error(`Error in getDhcpLeases:`, error);
+      return [];
+    }
+  }
+  
+  /**
+   * Lấy danh sách các thiết bị hàng xóm (neighbors) từ thiết bị MikroTik
+   * bao gồm ARP entries và DHCP leases
+   * @param deviceId ID of the MikroTik device
+   * @returns Array of network neighbors
+   */
+  async getNetworkNeighbors(deviceId: number): Promise<NetworkDeviceDetails[]> {
+    try {
+      const neighbors: NetworkDeviceDetails[] = [];
+      
+      // Get ARP entries
+      const arpEntries = await this.getArpEntries(deviceId);
+      
+      if (arpEntries && arpEntries.length > 0) {
+        console.log(`Found ${arpEntries.length} ARP entries for device ${deviceId}`);
+        
+        // Convert ARP entries to NetworkDeviceDetails
+        for (const entry of arpEntries) {
+          neighbors.push({
+            ipAddress: entry.address,
+            macAddress: entry.macAddress,
+            interface: entry.interface,
+            firstSeen: new Date(),
+            lastSeen: new Date(),
+            isOnline: true,
+            deviceType: 'unknown',
+            deviceRole: 'unknown'
+          });
+        }
+      }
+      
+      // Get DHCP leases
+      const dhcpLeases = await this.getDhcpLeases(deviceId);
+      
+      if (dhcpLeases && dhcpLeases.length > 0) {
+        console.log(`Found ${dhcpLeases.length} DHCP leases for device ${deviceId}`);
+        
+        // Convert DHCP leases to NetworkDeviceDetails and merge with existing entries
+        for (const lease of dhcpLeases) {
+          // Check if we already have this device from ARP entries
+          const existingIndex = neighbors.findIndex(n => 
+            n.ipAddress === lease.address || n.macAddress === lease.macAddress);
+          
+          if (existingIndex >= 0) {
+            // Update existing entry with DHCP information
+            neighbors[existingIndex].hostName = lease.hostName;
+            neighbors[existingIndex].lastSeen = new Date();
+          } else {
+            // Add new entry
+            neighbors.push({
+              ipAddress: lease.address,
+              macAddress: lease.macAddress,
+              hostName: lease.hostName,
+              firstSeen: new Date(),
+              lastSeen: new Date(),
+              isOnline: true,
+              deviceType: 'unknown',
+              deviceRole: 'unknown'
+            });
+          }
+        }
+      }
+      
+      return neighbors;
+    } catch (error) {
+      console.error(`Error in getNetworkNeighbors:`, error);
+      return [];
+    }
+  }
+  
+  /**
    * Lấy client kết nối tới thiết bị MikroTik theo ID
    */
   getClientForDevice(deviceId: number): MikrotikClient | undefined {
@@ -287,6 +465,28 @@ export class MikrotikService {
    * @param deviceId ID của thiết bị Mikrotik 
    * @returns Danh sách kết nối PPP và L2TP
    */
+  /**
+   * Gets client or initializes connection if needed
+   * @param deviceId The device ID
+   * @returns Connected MikrotikClient
+   */
+  async getClient(deviceId: number): Promise<MikrotikClient> {
+    let client = this.clients.get(deviceId);
+    
+    if (!client) {
+      const connected = await this.connectToDevice(deviceId);
+      if (!connected) {
+        throw new Error(`Could not connect to device ${deviceId}`);
+      }
+      client = this.clients.get(deviceId);
+      if (!client) {
+        throw new Error(`Failed to create client for device ${deviceId}`);
+      }
+    }
+    
+    return client;
+  }
+  
   async getLTPPConnections(deviceId: number): Promise<PPPConnection[]> {
     try {
       const client = await this.getClient(deviceId);
@@ -308,9 +508,9 @@ export class MikrotikService {
           type: 'pppoe' as const,
           user: session.user,
           uptime: session.uptime,
-          activeAddress: session['ac-name'] || null,
+          activeAddress: session['ac-name'] || undefined,
           service: session['service-name'],
-          status: session.status,
+          status: session.status || undefined,
           running: session.running,
           disabled: session.disabled,
           comment: session.comment || `Kết nối PPPoE: ${session.user || 'Unknown'}`,
@@ -325,7 +525,7 @@ export class MikrotikService {
           user: conn.user,
           uptime: conn.uptime,
           activeAddress: conn['active-address'],
-          status: null,
+          status: undefined, // Use undefined instead of null for compatibility
           running: conn.running,
           disabled: conn.disabled,
           comment: conn.comment || `Kết nối L2TP VPN: ${conn.user || conn['active-address'] || 'Unknown'}`,

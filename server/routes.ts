@@ -561,11 +561,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Device not found" });
       }
       
+      // Connect using connectToDevice which will try multiple ports
+      const connected = await mikrotikService.connectToDevice(deviceId);
+      
+      if (!connected) {
+        return res.status(500).json({ 
+          success: false,
+          message: "Failed to connect to the device" 
+        });
+      }
+      
       // Sử dụng mikrotikService để collect các metrics cơ bản
       const success = await mikrotikService.collectDeviceMetrics(deviceId);
       
       if (!success) {
-        return res.status(500).json({ message: "Failed to collect device metrics" });
+        return res.status(500).json({ 
+          success: false,
+          message: "Failed to collect device metrics" 
+        });
       }
       
       // Nếu thiết bị có wireless, collect wireless stats
@@ -578,10 +591,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await capsmanService.collectCapsmanStats(deviceId);
       }
       
-      res.json({ message: "Device metrics refreshed successfully" });
+      // Disconnect after we're done
+      await mikrotikService.disconnectFromDevice(deviceId);
+      
+      res.json({ 
+        success: true, 
+        message: "Device metrics refreshed successfully" 
+      });
     } catch (error) {
       console.error("Error refreshing device metrics:", error);
-      res.status(500).json({ message: "Failed to refresh device metrics" });
+      res.status(500).json({ 
+        success: false,
+        message: `Failed to refresh device metrics: ${error instanceof Error ? error.message : String(error)}` 
+      });
     }
   });
 
@@ -974,7 +996,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log("Không tìm thấy thiết bị từ phương pháp quét thông thường, thử phương pháp quét trực tiếp");
         
         // Lấy thông tin neighbor trực tiếp từ router
-        const directDevices = await mikrotikService.getNetworkNeighbors({ id: routerId });
+        const directDevices = await mikrotikService.getNetworkNeighbors(routerId);
         console.log(`Phát hiện ${directDevices.length} thiết bị bằng phương pháp trực tiếp`);
         
         if (directDevices.length > 0) {
