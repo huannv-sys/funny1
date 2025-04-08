@@ -14,6 +14,7 @@ import {
   clientManagementService
 } from "./services";
 import { idsService } from './services/ids';
+import { generateTestTrafficData } from './services/ids/test-generator';
 import * as discoveryService from "./services/discovery";
 import * as deviceIdentificationService from "./services/device-identification";
 import * as deviceClassifierService from "./services/device-classifier";
@@ -26,7 +27,8 @@ import {
   networkDevices
 } from "@shared/schema";
 import { db } from "./db";
-import { eq } from "drizzle-orm";
+import { eq, asc } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { z } from "zod";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -1525,6 +1527,170 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({
         success: false,
         message: `Lỗi khi lấy danh sách bất thường: ${error instanceof Error ? error.message : String(error)}`
+      });
+    }
+  });
+
+  // Endpoint kiểm tra phát hiện xâm nhập
+
+  // Endpoint kiểm tra phát hiện xâm nhập
+  router.post("/security/test-scan-detection", async (req: Request, res: Response) => {
+    try {
+      const { deviceId, type, sourceIp, destinationIp } = req.body;
+      
+      if (!deviceId || !type) {
+        return res.status(400).json({
+          success: false,
+          message: "Thiếu tham số bắt buộc: deviceId, type"
+        });
+      }
+      
+      // Kiểm tra loại tấn công hợp lệ
+      if (!['port_scan', 'dos_attack', 'bruteforce'].includes(type)) {
+        return res.status(400).json({
+          success: false,
+          message: "Loại tấn công không hợp lệ. Hỗ trợ: port_scan, dos_attack, bruteforce"
+        });
+      }
+      
+      // Tạo dữ liệu lưu lượng giả định
+      const trafficData = generateTestTrafficData({
+        deviceId,
+        type: type as 'port_scan' | 'dos_attack' | 'bruteforce',
+        sourceIp,
+        destinationIp
+      });
+      
+      // Phân tích từng mẫu lưu lượng
+      const results = [];
+      let anomalyCount = 0;
+      
+      for (const traffic of trafficData) {
+        const result = await idsService.analyzeTraffic(traffic);
+        if (result) {
+          results.push(result);
+          if (result.isAnomaly) anomalyCount++;
+        }
+      }
+      
+      res.json({
+        success: true,
+        message: `Đã phân tích ${trafficData.length} mẫu lưu lượng, phát hiện ${anomalyCount} bất thường`,
+        data: {
+          sampleCount: trafficData.length,
+          anomalyCount,
+          detectionRate: (anomalyCount / trafficData.length) * 100,
+          type
+        }
+      });
+    } catch (error) {
+      console.error("Lỗi khi kiểm tra phát hiện xâm nhập:", error);
+      res.status(500).json({
+        success: false,
+        message: `Lỗi khi kiểm tra phát hiện xâm nhập: ${error instanceof Error ? error.message : String(error)}`
+      });
+    }
+  });
+
+  // Endpoint phân tích lưu lượng theo giao thức
+  router.get("/devices/:id/protocols", async (req: Request, res: Response) => {
+    try {
+      const deviceId = parseInt(req.params.id);
+      const timeRange = req.query.timeRange as string || 'hour';
+      
+      // Truy vấn cơ sở dữ liệu để lấy dữ liệu giao thức
+      const result = await db.select({
+        protocol: networkTrafficFeatures.protocol,
+        count: sql`count(*)`,
+      })
+      .from(networkTrafficFeatures)
+      .where(eq(networkTrafficFeatures.deviceId, deviceId))
+      .groupBy(networkTrafficFeatures.protocol);
+      
+      // Tính tổng số lượng
+      const total = result.reduce((sum, item) => sum + Number(item.count), 0);
+      
+      // Tạo dữ liệu phân phối với tỷ lệ phần trăm
+      const data = result.map(item => ({
+        protocol: item.protocol,
+        count: Number(item.count),
+        percentage: Number(item.count) / total
+      }));
+      
+      res.json({
+        success: true,
+        data
+      });
+    } catch (error) {
+      console.error("Lỗi khi lấy dữ liệu giao thức:", error);
+      res.status(500).json({
+        success: false,
+        message: `Lỗi khi lấy dữ liệu giao thức: ${error instanceof Error ? error.message : String(error)}`
+      });
+    }
+  });
+
+  // Endpoint phân tích lưu lượng theo địa chỉ IP nguồn
+  router.get("/devices/:id/sources", async (req: Request, res: Response) => {
+    try {
+      const deviceId = parseInt(req.params.id);
+      const timeRange = req.query.timeRange as string || 'hour';
+      const limit = parseInt(req.query.limit as string || '10');
+      
+      // Truy vấn cơ sở dữ liệu để lấy dữ liệu địa chỉ IP nguồn
+      const result = await db.select({
+        ip: networkTrafficFeatures.sourceIp,
+        count: sql`count(*)`,
+        bytes: sql`sum(${networkTrafficFeatures.bytes})`
+      })
+      .from(networkTrafficFeatures)
+      .where(eq(networkTrafficFeatures.deviceId, deviceId))
+      .groupBy(networkTrafficFeatures.sourceIp)
+      .orderBy(sql`count(*) desc`)
+      .limit(limit);
+      
+      // Chuyển đổi sang dạng mảng đối tượng
+      const data = result.map(item => ({
+        ip: item.ip,
+        connections: Number(item.count),
+        bytes: Number(item.bytes)
+      }));
+      
+      res.json({
+        success: true,
+        data
+      });
+    } catch (error) {
+      console.error("Lỗi khi lấy dữ liệu địa chỉ IP nguồn:", error);
+      res.status(500).json({
+        success: false,
+        message: `Lỗi khi lấy dữ liệu địa chỉ IP nguồn: ${error instanceof Error ? error.message : String(error)}`
+      });
+    }
+  });
+
+  // Endpoint lấy dữ liệu băng thông theo thời gian
+  router.get("/devices/:id/traffic", async (req: Request, res: Response) => {
+    try {
+      const deviceId = parseInt(req.params.id);
+      const timeRange = req.query.timeRange as string || 'hour';
+      
+      // Lấy thống kê băng thông từ bảng deviceMetrics
+      const metricsData = await db.select()
+        .from(deviceMetrics)
+        .where(eq(deviceMetrics.deviceId, deviceId))
+        .orderBy(asc(deviceMetrics.timestamp))
+        .limit(100);
+      
+      res.json({
+        success: true,
+        data: metricsData
+      });
+    } catch (error) {
+      console.error("Lỗi khi lấy dữ liệu băng thông:", error);
+      res.status(500).json({
+        success: false,
+        message: `Lỗi khi lấy dữ liệu băng thông: ${error instanceof Error ? error.message : String(error)}`
       });
     }
   });

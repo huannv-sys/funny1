@@ -345,22 +345,40 @@ export type UserLog = typeof userLogs.$inferSelect;
 export type InsertUserLog = z.infer<typeof insertUserLogSchema>;
 export type Role = "admin" | "operator" | "viewer";
 
-// AI IDS Schema - Lưu trữ dữ liệu cho hệ thống phát hiện xâm nhập dựa trên AI
+// Device Metrics table - lưu thông tin băng thông và hiệu suất thiết bị
+export const deviceMetrics = pgTable("device_metrics", {
+  id: serial("id").primaryKey(),
+  deviceId: integer("device_id").notNull(),
+  timestamp: timestamp("timestamp").defaultNow(),
+  downloadSpeed: real("download_speed"), // tốc độ tải về (Mbps)
+  uploadSpeed: real("upload_speed"), // tốc độ tải lên (Mbps)
+  cpuLoad: real("cpu_load"), // % tải CPU
+  memoryUsed: real("memory_used"), // % sử dụng bộ nhớ
+  diskUsage: real("disk_usage"), // % sử dụng ổ đĩa
+  temperature: real("temperature"), // nhiệt độ thiết bị nếu có
+  activeSessions: integer("active_sessions"), // số phiên kết nối hoạt động
+  metadata: jsonb("metadata"), // dữ liệu bổ sung
+});
+
+// Network Traffic Features - lưu thông tin về đặc điểm traffic để phân tích bất thường
 export const networkTrafficFeatures = pgTable("network_traffic_features", {
   id: serial("id").primaryKey(),
-  deviceId: integer("device_id").references(() => devices.id, { onDelete: 'cascade' }),
-  sourceIp: text("source_ip"),
-  destinationIp: text("destination_ip"),
+  deviceId: integer("device_id").notNull(),
+  timestamp: timestamp("timestamp").defaultNow(),
+  sourceIp: text("source_ip").notNull(),
+  destinationIp: text("destination_ip").notNull(),
   sourcePort: integer("source_port"),
   destinationPort: integer("destination_port"),
-  protocol: text("protocol"),
-  bytes: integer("bytes").default(0),
-  packetCount: integer("packet_count").default(0),
-  timestamp: timestamp("timestamp").defaultNow(),
+  protocol: text("protocol"), // TCP, UDP, ICMP, etc.
+  bytes: integer("bytes"), // số bytes trong luồng
+  packetCount: integer("packet_count"), // số gói tin
+  flowDuration: integer("flow_duration"), // thời lượng luồng (ms)
+  isAnomaly: boolean("is_anomaly").default(false), // có phải bất thường
+  anomalyScore: real("anomaly_score"), // điểm bất thường (0-1)
+  anomalyType: text("anomaly_type"), // loại bất thường nếu có
   featuresJson: jsonb("features_json"), // Thông tin đặc trưng cho dự đoán ML
-  isAnomaly: boolean("is_anomaly").default(false),
-  anomalyScore: real("anomaly_score").default(0),
   analyzedAt: timestamp("analyzed_at"),
+  additionalFeatures: jsonb("additional_features"), // đặc điểm bổ sung
 });
 
 // Lịch sử phát hiện từ IDS

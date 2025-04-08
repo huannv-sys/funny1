@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Device } from "@shared/schema";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "@/hooks/use-toast";
+import TrafficVisualizations from "@/components/visualizations/TrafficVisualizations";
 
 // Define firewall rule types
 interface FirewallRule {
@@ -265,6 +266,7 @@ const SecurityPage = () => {
       <Tabs defaultValue="threats" className="space-y-4" autoCollapse>
         <TabsList>
           <TabsTrigger value="threats">Security Threats</TabsTrigger>
+          <TabsTrigger value="traffic">Traffic Analysis</TabsTrigger>
           <TabsTrigger value="firewall">Firewall Rules</TabsTrigger>
           <TabsTrigger value="vpn">VPN Status</TabsTrigger>
         </TabsList>
@@ -314,6 +316,37 @@ const SecurityPage = () => {
                   <h3 className="text-lg font-medium text-gray-900 mb-2">No Security Threats Detected</h3>
                   <p className="text-sm text-gray-500 text-center">
                     No current security threats have been detected for this device.
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="traffic" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Phân tích lưu lượng và phát hiện xâm nhập</CardTitle>
+              <CardDescription>
+                Biểu đồ và trực quan hóa dữ liệu lưu lượng mạng kết hợp với hệ thống phát hiện xâm nhập dựa trên AI
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {selectedDeviceId ? (
+                <TrafficVisualizations 
+                  deviceId={selectedDeviceId} 
+                  refreshInterval={30000}
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center py-12">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 text-gray-400 mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                    <line x1="8" y1="21" x2="16" y2="21"></line>
+                    <line x1="12" y1="17" x2="12" y2="21"></line>
+                  </svg>
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">Chọn thiết bị</h3>
+                  <p className="text-sm text-gray-500 text-center">
+                    Vui lòng chọn một thiết bị để xem biểu đồ phân tích lưu lượng.
                   </p>
                 </div>
               )}
