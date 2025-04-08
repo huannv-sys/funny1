@@ -20,12 +20,8 @@ import * as deviceIdentificationService from "./services/device-identification";
 import * as deviceClassifierService from "./services/device-classifier";
 import { interfaceHealthService } from "./services/interface_health";
 import { initLogAnalyzerService, getLogAnalyzerService } from './services/log-analyzer';
-import { 
-  insertDeviceSchema, 
-  insertAlertSchema,
-  insertNetworkDeviceSchema,
-  networkDevices
-} from "@shared/schema";
+import * as schema from "../shared/schema";
+import { networkDevices, networkTrafficFeatures, deviceMetrics } from "../shared/schema";
 import { db } from "./db";
 import { eq, asc } from "drizzle-orm";
 import { sql } from "drizzle-orm";
@@ -91,7 +87,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   router.post("/devices", async (req: Request, res: Response) => {
     try {
-      const validatedData = insertDeviceSchema.parse(req.body);
+      const validatedData = schema.insertDeviceSchema.parse(req.body);
       const device = await storage.createDevice(validatedData);
       res.status(201).json(device);
     } catch (error) {
@@ -112,7 +108,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Tạo một schema mở rộng để cho phép cập nhật thêm các trường
-      const updateDeviceSchema = insertDeviceSchema.partial().extend({
+      const updateDeviceSchema = schema.insertDeviceSchema.partial().extend({
         hasCAPsMAN: z.boolean().optional(),
         hasWireless: z.boolean().optional(),
         isOnline: z.boolean().optional(),
@@ -519,7 +515,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   router.post("/alerts", async (req: Request, res: Response) => {
     try {
-      const validatedData = insertAlertSchema.parse(req.body);
+      const validatedData = schema.insertAlertSchema.parse(req.body);
       const alert = await storage.createAlert(validatedData);
       res.status(201).json(alert);
     } catch (error) {
@@ -1144,7 +1140,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   router.post("/network-devices", async (req: Request, res: Response) => {
     try {
-      const validatedData = insertNetworkDeviceSchema.parse(req.body);
+      const validatedData = schema.insertNetworkDeviceSchema.parse(req.body);
       const device = await discoveryService.detectDevice(
         validatedData.ipAddress,
         validatedData.macAddress,
@@ -1522,10 +1518,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Kết nối đến thiết bị Mikrotik thực để lấy dữ liệu firewall log gần đây
       try {
         const deviceId = parseInt(req.query.deviceId as string || '2'); // Default to device 2 if none provided
-        const device = await db.select().from(devices).where(eq(devices.id, deviceId)).limit(1);
+        const device = await db.select().from(schema.devices).where(eq(schema.devices.id, deviceId)).limit(1);
         
         if (device && device.length > 0) {
-          const mikrotikService = await getMikrotikService(device[0]);
+          // Use the existing mikrotikService instance
+          try {
+            await mikrotikService.connect(device[0]);
+          } catch (err) {
+            console.error("Failed to connect to device:", err);
+          }
           if (mikrotikService) {
             // Lấy log firewall từ thiết bị
             const firewallLogs = await mikrotikService.executeCommand('/log print where topics ~ "firewall"');
@@ -1600,7 +1601,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const deviceId = parseInt(req.query.deviceId as string || '2');
         
         // Lấy thông tin thiết bị
-        const device = await db.select().from(devices).where(eq(devices.id, deviceId)).limit(1);
+        const device = await db.select().from(schema.devices).where(eq(schema.devices.id, deviceId)).limit(1);
         const deviceIp = device && device.length > 0 ? device[0].ipAddress : '192.168.1.1';
         
         // Tạo 3 bản ghi mẫu từ thiết bị thực

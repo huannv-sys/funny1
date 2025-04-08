@@ -49,7 +49,8 @@ class ModelLoader {
       // Try multiple possible paths for the model
       const possiblePaths = [
         join(process.cwd(), 'rf_model.joblib'),
-        join(process.cwd(), 'attached_assets', 'rf_model.joblib')
+        join(process.cwd(), 'attached_assets', 'rf_model.joblib'),
+        join(process.cwd(), 'server', 'assets', 'rf_model.joblib')
       ];
       
       // Using dynamic import for fs

@@ -22,8 +22,24 @@ def load_model(model_path="rf_model.joblib"):
         The loaded model
     """
     try:
-        model = joblib.load(model_path)
-        return model
+        # Try multiple possible paths for the model file
+        possible_paths = [
+            model_path,
+            "./server/assets/rf_model.joblib",
+            "./attached_assets/rf_model.joblib"
+        ]
+        
+        for path in possible_paths:
+            try:
+                model = joblib.load(path)
+                print(f"Successfully loaded model from {path}", file=sys.stderr)
+                return model
+            except Exception as e:
+                print(f"Failed to load model from {path}: {str(e)}", file=sys.stderr)
+                continue
+                
+        print("Could not load model from any path", file=sys.stderr)
+        return None
     except Exception as e:
         print(f"Error loading model: {str(e)}", file=sys.stderr)
         return None
