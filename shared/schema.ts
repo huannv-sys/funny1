@@ -344,3 +344,56 @@ export type InsertSession = z.infer<typeof insertSessionSchema>;
 export type UserLog = typeof userLogs.$inferSelect;
 export type InsertUserLog = z.infer<typeof insertUserLogSchema>;
 export type Role = "admin" | "operator" | "viewer";
+
+// AI IDS Schema - Lưu trữ dữ liệu cho hệ thống phát hiện xâm nhập dựa trên AI
+export const networkTrafficFeatures = pgTable("network_traffic_features", {
+  id: serial("id").primaryKey(),
+  deviceId: integer("device_id").references(() => devices.id, { onDelete: 'cascade' }),
+  sourceIp: text("source_ip"),
+  destinationIp: text("destination_ip"),
+  sourcePort: integer("source_port"),
+  destinationPort: integer("destination_port"),
+  protocol: text("protocol"),
+  bytes: integer("bytes").default(0),
+  packetCount: integer("packet_count").default(0),
+  timestamp: timestamp("timestamp").defaultNow(),
+  featuresJson: jsonb("features_json"), // Thông tin đặc trưng cho dự đoán ML
+  isAnomaly: boolean("is_anomaly").default(false),
+  anomalyScore: real("anomaly_score").default(0),
+  analyzedAt: timestamp("analyzed_at"),
+});
+
+// Lịch sử phát hiện từ IDS
+export const idsDetectionHistory = pgTable("ids_detection_history", {
+  id: serial("id").primaryKey(),
+  trafficFeatureId: integer("traffic_feature_id").references(() => networkTrafficFeatures.id, { onDelete: 'cascade' }),
+  deviceId: integer("device_id").references(() => devices.id, { onDelete: 'cascade' }),
+  timestamp: timestamp("timestamp").defaultNow(),
+  isAnomaly: boolean("is_anomaly").notNull(),
+  probability: real("probability").notNull(),
+  alertId: integer("alert_id").references(() => alerts.id),
+  details: jsonb("details"),
+});
+
+// Export IDS related schemas and types
+export const insertNetworkTrafficFeaturesSchema = createInsertSchema(networkTrafficFeatures).omit({
+  id: true,
+  timestamp: true,
+  analyzedAt: true,
+});
+
+export const insertIdsDetectionHistorySchema = createInsertSchema(idsDetectionHistory).omit({
+  id: true,
+  timestamp: true,
+});
+
+export type NetworkTrafficFeature = typeof networkTrafficFeatures.$inferSelect;
+export type InsertNetworkTrafficFeature = z.infer<typeof insertNetworkTrafficFeaturesSchema>;
+export type IdsDetectionHistory = typeof idsDetectionHistory.$inferSelect;
+export type InsertIdsDetectionHistory = z.infer<typeof insertIdsDetectionHistorySchema>;
+
+// WebSocket Message Types
+export type WebSocketMessage = {
+  type: 'FIREWALL_RULE_UPDATE' | 'DEVICE_STATUS_UPDATE' | 'TRAFFIC_UPDATE' | 'CONNECTION_ESTABLISHED' | 'ERROR' | 'SECURITY_ALERT';
+  payload: any;
+};

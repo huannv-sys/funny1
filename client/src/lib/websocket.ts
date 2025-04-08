@@ -85,6 +85,19 @@ function handleWebSocketMessage(message: WebSocketMessage) {
       });
       break;
       
+    case "SECURITY_ALERT":
+      // Invalidate alerts query when new security alert detected
+      queryClient.invalidateQueries({
+        queryKey: ['/api/alerts'],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ['/api/security/anomalies'],
+      });
+      
+      // También se podría mostrar una notificación al usuario
+      console.warn("Security alert detected:", message.payload);
+      break;
+      
     case "CONNECTION_ESTABLISHED":
       console.log("WebSocket connection established at:", message.payload.timestamp);
       break;

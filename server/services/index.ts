@@ -1,29 +1,30 @@
-// Export tất cả các services
-export * from './mikrotik';
-export * from './wireless';
-export * from './capsman';
-export * from './device_info';
-export * from './discovery';
-export * from './device-identification';
-export * from './device-classifier';
-export * from './traffic-collector';
-export * from './scheduler';
-export * from './dhcp';
-export * from './network-scanner';
-
-// Import từ client-management service
-import clientManagementService from './client-management';
-
-// Alias exports
-import * as deviceIdentificationService from './device-identification';
-import * as deviceClassifierService from './device-classifier';
-import * as trafficCollectorService from './traffic-collector';
-import * as discoveryService from './discovery';
+// Export all services
+import { mikrotikService } from './mikrotik';
+import { wirelessService } from './wireless';
+import { capsmanService } from './capsman';
+// Import deviceInfoService only if the module exists
+let deviceInfoService: any = {};
+try {
+  // Try to dynamically import
+  const deviceInfo = require('./device-info');
+  deviceInfoService = deviceInfo.deviceInfoService;
+} catch (error) {
+  console.warn('Device info service not found, using empty object');
+}
+import { schedulerService } from './scheduler';
+import { clientManagementService } from './client-management';
+import { trafficCollectorService } from './traffic-collector';
+import { networkScannerService } from './network-scanner';
+import { idsService } from './ids';
 
 export {
+  mikrotikService,
+  wirelessService,
+  capsmanService,
+  deviceInfoService,
+  schedulerService,
   clientManagementService,
-  deviceIdentificationService,
-  deviceClassifierService,
   trafficCollectorService,
-  discoveryService
+  networkScannerService,
+  idsService
 };

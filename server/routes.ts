@@ -13,6 +13,7 @@ import {
   networkScannerService,
   clientManagementService
 } from "./services";
+import { idsService } from './services/ids';
 import * as discoveryService from "./services/discovery";
 import * as deviceIdentificationService from "./services/device-identification";
 import * as deviceClassifierService from "./services/device-classifier";
@@ -1464,6 +1465,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     }
   });
+
+  // AI IDS Endpoints
+  router.post("/security/analyze-traffic", async (req: Request, res: Response) => {
+    try {
+      const trafficData = req.body;
+      
+      if (!trafficData || !trafficData.sourceIp || !trafficData.destinationIp) {
+        return res.status(400).json({
+          success: false,
+          message: "Dữ liệu không hợp lệ. Cần các trường: sourceIp, destinationIp, sourcePort, destinationPort, protocol, bytes, packetCount, flowDuration, deviceId"
+        });
+      }
+      
+      const result = await idsService.analyzeTraffic(trafficData);
+      
+      if (!result) {
+        return res.status(500).json({
+          success: false,
+          message: "Không thể phân tích dữ liệu traffic"
+        });
+      }
+      
+      res.json({
+        success: true,
+        data: {
+          isAnomaly: result.isAnomaly,
+          probability: result.probability,
+          timestamp: result.timestamp
+        }
+      });
+    } catch (error) {
+      console.error("Lỗi khi phân tích traffic với IDS:", error);
+      res.status(500).json({
+        success: false,
+        message: `Lỗi khi phân tích traffic với IDS: ${error instanceof Error ? error.message : String(error)}`
+      });
+    }
+  });
+
+  // Lấy danh sách các bất thường được phát hiện bởi AI IDS trong khoảng thời gian
+  router.get("/security/anomalies", async (req: Request, res: Response) => {
+    try {
+      const startTime = req.query.startTime 
+        ? new Date(req.query.startTime as string) 
+        : new Date(Date.now() - 24 * 60 * 60 * 1000); // Mặc định là 24 giờ qua
+      const endTime = req.query.endTime 
+        ? new Date(req.query.endTime as string) 
+        : new Date();
+      
+      const anomalies = await idsService.getAnomalies(startTime, endTime);
+      
+      res.json({
+        success: true,
+        data: anomalies
+      });
+    } catch (error) {
+      console.error("Lỗi khi lấy danh sách bất thường:", error);
+      res.status(500).json({
+        success: false,
+        message: `Lỗi khi lấy danh sách bất thường: ${error instanceof Error ? error.message : String(error)}`
+      });
+    }
+  });
+
+
 
   // Tuyến đường API trực tiếp (không qua router)
   app.get('/apitest', (req, res) => {

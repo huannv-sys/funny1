@@ -29,6 +29,22 @@ export const WebSocketMessageSchema = z.discriminatedUnion('type', [
     }),
   }),
   z.object({
+    type: z.literal('SECURITY_ALERT'),
+    payload: z.object({
+      alertId: z.number(),
+      deviceId: z.number(),
+      message: z.string(),
+      severity: z.string(),
+      source: z.string(),
+      details: z.object({
+        sourceIp: z.string(),
+        destinationIp: z.string(),
+        probability: z.number(),
+        timestamp: z.string(),
+      }).optional(),
+    }),
+  }),
+  z.object({
     type: z.literal('CONNECTION_ESTABLISHED'),
     payload: z.object({
       timestamp: z.string(),
