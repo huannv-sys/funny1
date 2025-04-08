@@ -1,5 +1,5 @@
 import { queryClient } from "./queryClient";
-import { WebSocketMessage } from "@shared/schema";
+import { WebSocketMessage } from "@shared/zod";
 
 let socket: WebSocket | null = null;
 let reconnectTimeout: NodeJS.Timeout | null = null;
@@ -65,7 +65,7 @@ function handleWebSocketMessage(message: WebSocketMessage) {
   switch (message.type) {
     case "FIREWALL_RULE_UPDATE":
       // Invalidate firewall rules query for the specific device
-      const { deviceId } = message.payload;
+      const deviceId = message.payload.deviceId;
       queryClient.invalidateQueries({
         queryKey: ['/api/devices', deviceId, 'firewall-rules'],
       });
@@ -77,17 +77,25 @@ function handleWebSocketMessage(message: WebSocketMessage) {
         queryKey: ['/api/devices'],
       });
       break;
+      
+    case "TRAFFIC_UPDATE":
+      // Invalidate metrics query for the specific device
+      queryClient.invalidateQueries({
+        queryKey: ['/api/devices', message.payload.deviceId, 'metrics'],
+      });
+      break;
+      
+    case "CONNECTION_ESTABLISHED":
+      console.log("WebSocket connection established at:", message.payload.timestamp);
+      break;
 
     case "ERROR":
       console.error("WebSocket error message:", message.payload);
       break;
-
-    default:
-      console.warn("Unknown WebSocket message type:", message.type);
   }
 }
 
-export function sendWebSocketMessage(message: WebSocketMessage): void {
+export function sendWebSocketMessage(message: any): void {
   if (socket && socket.readyState === WebSocket.OPEN) {
     socket.send(JSON.stringify(message));
   } else {

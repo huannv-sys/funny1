@@ -1521,8 +1521,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     
     // Send initial connection confirmation
     ws.send(JSON.stringify({
-      type: 'connection_established',
-      timestamp: new Date().toISOString()
+      type: 'CONNECTION_ESTABLISHED',
+      payload: {
+        timestamp: new Date().toISOString()
+      }
     }));
   });
   
