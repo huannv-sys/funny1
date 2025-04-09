@@ -90,6 +90,7 @@ const TrafficVisualizations: React.FC<TrafficVisualizationsProps> = ({
   // Fetch traffic data
   const { data: trafficData, isLoading: trafficLoading } = useQuery({
     queryKey: ['/api/devices', deviceId, 'traffic', timeRange],
+    queryFn: () => apiRequest(`/api/devices/${deviceId}/traffic?timeRange=${timeRange}`),
     refetchInterval: refreshInterval,
     refetchOnWindowFocus: true,
   });
@@ -97,18 +98,21 @@ const TrafficVisualizations: React.FC<TrafficVisualizationsProps> = ({
   // Fetch interface statistics data - REAL DATA
   const { data: interfaceStatsData, isLoading: interfaceStatsLoading } = useQuery({
     queryKey: ['/api/devices', deviceId, 'interface-stats'],
+    queryFn: () => apiRequest(`/api/devices/${deviceId}/interface-stats`),
     refetchInterval: refreshInterval,
   });
 
   // Fetch protocol distribution data
   const { data: protocolData, isLoading: protocolLoading } = useQuery({
     queryKey: ['/api/devices', deviceId, 'protocols', timeRange],
+    queryFn: () => apiRequest(`/api/devices/${deviceId}/protocols?timeRange=${timeRange}`),
     refetchInterval: refreshInterval,
   });
 
   // Fetch top sources data
   const { data: sourceData, isLoading: sourceLoading } = useQuery({
     queryKey: ['/api/devices', deviceId, 'sources', timeRange],
+    queryFn: () => apiRequest(`/api/devices/${deviceId}/sources?timeRange=${timeRange}&limit=10`),
     refetchInterval: refreshInterval,
   });
 
