@@ -6,7 +6,6 @@ import * as RouterOS from 'routeros-client';
 import { storage } from "./storage";
 import { 
   mikrotikService,
-  MikrotikService,
   wirelessService, 
   capsmanService, 
   schedulerService, 
@@ -1540,100 +1539,93 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let anomalies = await idsService.getAnomalies(startTime, endTime);
       
       // Kết nối đến thiết bị Mikrotik thực để lấy dữ liệu firewall log gần đây
-      try {
-        const deviceId = parseInt(req.query.deviceId as string || '2'); // Default to device 2 if none provided
-        const device = await db.select().from(schema.devices).where(eq(schema.devices.id, deviceId)).limit(1);
-        
-        if (device && device.length > 0) {
-          // Use the existing mikrotikService instance
-          try {
-            // Tạo một client MikroTik mới
-            const mikrotikClient = mikrotikService.createClientInstance();
-            // Thiết lập thông tin kết nối
-            mikrotikClient.setConfig(
-              device[0].ipAddress,
-              device[0].username,
-              device[0].password,
-              8728
-            );
+      const deviceId = parseInt(req.query.deviceId as string || '2'); // Default to device 2 if none provided
+      const device = await db.select().from(schema.devices).where(eq(schema.devices.id, deviceId)).limit(1);
+      
+      if (device && device.length > 0) {
+        try {
+          // Kết nối đến thiết bị Mikrotik
+          const connected = await mikrotikService.connectToDevice(device[0].id);
+          if (!connected) {
+            console.error("Không thể kết nối đến thiết bị:", device[0].ipAddress);
+            throw new Error("Không thể kết nối đến thiết bị");
+          }
+          
+          // Lấy client kết nối
+          const client = mikrotikService.getClientForDevice(device[0].id);
+          if (!client) {
+            throw new Error("Không thể lấy client kết nối cho thiết bị");
+          }
+          
+          // Lấy log firewall từ thiết bị
+          const firewallLogs = await client.executeCommand('/log/print', [
+            { "?topics": "firewall" }
+          ]);
+          
+          if (firewallLogs && firewallLogs.length > 0) {
+            console.log(`Đã tìm thấy ${firewallLogs.length} log firewall từ thiết bị ${device[0].name}`);
             
-            // Kết nối đến thiết bị
-            const connected = await mikrotikClient.connect();
-            if (!connected) {
-              console.error("Không thể kết nối đến thiết bị:", device[0].ipAddress);
-              throw new Error("Không thể kết nối đến thiết bị");
-            }
-            
-            // Lấy log firewall từ thiết bị
-            const firewallLogs = await mikrotikClient.executeCommand('/log/print', [
-              { "?topics": "firewall" }
-            ]);
-            
-            if (firewallLogs && firewallLogs.length > 0) {
-              console.log(`Đã tìm thấy ${firewallLogs.length} log firewall từ thiết bị ${device[0].name}`);
+            // Chuyển đổi dữ liệu firewall log thành định dạng của anomalies
+            const realFirewallAnomalies = firewallLogs.map((log: any, index: number) => {
+              // Giả định log có định dạng: time="hh:mm:ss" topics="firewall,warning" message="input: in:ether1, out:(none), src-mac xx:xx:xx:xx:xx:xx, proto TCP (SYN), 192.168.1.x:xxxxx->192.168.1.x:xx, len 64"
+              const message = log.message || '';
               
-              // Chuyển đổi dữ liệu firewall log thành định dạng của anomalies
-              const realFirewallAnomalies = firewallLogs.map((log: any, index: number) => {
-                // Giả định log có định dạng: time="hh:mm:ss" topics="firewall,warning" message="input: in:ether1, out:(none), src-mac xx:xx:xx:xx:xx:xx, proto TCP (SYN), 192.168.1.x:xxxxx->192.168.1.x:xx, len 64"
-                const message = log.message || '';
-                
-                // Tách thông tin IP nguồn và đích từ log
-                const ipMatch = message.match(/(\d+\.\d+\.\d+\.\d+):(\d+)->(\d+\.\d+\.\d+\.\d+):(\d+)/);
-                const sourceIp = ipMatch ? ipMatch[1] : 'unknown';
-                const sourcePort = ipMatch ? parseInt(ipMatch[2]) : 0;
-                const destinationIp = ipMatch ? ipMatch[3] : 'unknown';
-                const destinationPort = ipMatch ? parseInt(ipMatch[4]) : 0;
-                
-                // Xác định loại protocol từ log
-                const protoMatch = message.match(/proto (\w+)/);
-                const protocol = protoMatch ? protoMatch[1].toLowerCase() : 'unknown';
-                
-                // Xác định loại tấn công dựa trên các pattern trong log
-                let attackType = 'Unknown';
-                if (message.includes('SYN flood')) {
-                  attackType = 'DoS Attack';
-                } else if (message.includes('port scan') || (protocol === 'tcp' && message.includes('SYN'))) {
-                  attackType = 'Port Scan';
-                } else if (message.includes('brute force') || (destinationPort === 22 || destinationPort === 23)) {
-                  attackType = 'Brute Force';
-                } else if (message.includes('drop')) {
-                  attackType = 'Blocked Traffic';
-                }
-                
-                return {
-                  id: index + 1,
-                  trafficFeatureId: index + 1000,
-                  deviceId: deviceId,
-                  sourceIp: sourceIp,
-                  destinationIp: destinationIp,
-                  sourcePort: sourcePort,
-                  destinationPort: destinationPort,
-                  protocol: protocol,
-                  isAnomaly: true,
-                  probability: 0.85 + (Math.random() * 0.15), // Giá trị ngẫu nhiên từ 0.85-1.0
-                  timestamp: new Date(new Date().setMinutes(new Date().getMinutes() - index * 5)), // Random timestamp trong 1 giờ qua
-                  attackType: attackType,
-                  confidenceScore: (0.85 + (Math.random() * 0.15)).toFixed(2),
-                  details: {
-                    message: message,
-                    sourceIp: sourceIp,
-                    destinationIp: destinationIp
-                  }
-                };
-              });
+              // Tách thông tin IP nguồn và đích từ log
+              const ipMatch = message.match(/(\d+\.\d+\.\d+\.\d+):(\d+)->(\d+\.\d+\.\d+\.\d+):(\d+)/);
+              const sourceIp = ipMatch ? ipMatch[1] : 'unknown';
+              const sourcePort = ipMatch ? parseInt(ipMatch[2]) : 0;
+              const destinationIp = ipMatch ? ipMatch[3] : 'unknown';
+              const destinationPort = ipMatch ? parseInt(ipMatch[4]) : 0;
               
-              // Nếu đã có dữ liệu anomalies từ database, kết hợp với dữ liệu thực từ thiết bị
-              if (anomalies.length > 0) {
-                anomalies = [...anomalies, ...realFirewallAnomalies];
-              } else {
-                anomalies = realFirewallAnomalies;
+              // Xác định loại protocol từ log
+              const protoMatch = message.match(/proto (\w+)/);
+              const protocol = protoMatch ? protoMatch[1].toLowerCase() : 'unknown';
+              
+              // Xác định loại tấn công dựa trên các pattern trong log
+              let attackType = 'Unknown';
+              if (message.includes('SYN flood')) {
+                attackType = 'DoS Attack';
+              } else if (message.includes('port scan') || (protocol === 'tcp' && message.includes('SYN'))) {
+                attackType = 'Port Scan';
+              } else if (message.includes('brute force') || (destinationPort === 22 || destinationPort === 23)) {
+                attackType = 'Brute Force';
+              } else if (message.includes('drop')) {
+                attackType = 'Blocked Traffic';
               }
+              
+              return {
+                id: index + 1,
+                trafficFeatureId: index + 1000,
+                deviceId: deviceId,
+                sourceIp: sourceIp,
+                destinationIp: destinationIp,
+                sourcePort: sourcePort,
+                destinationPort: destinationPort,
+                protocol: protocol,
+                isAnomaly: true,
+                probability: 0.85 + (Math.random() * 0.15), // Giá trị ngẫu nhiên từ 0.85-1.0
+                timestamp: new Date(new Date().setMinutes(new Date().getMinutes() - index * 5)), // Random timestamp trong 1 giờ qua
+                attackType: attackType,
+                confidenceScore: (0.85 + (Math.random() * 0.15)).toFixed(2),
+                details: {
+                  message: message,
+                  sourceIp: sourceIp,
+                  destinationIp: destinationIp
+                }
+              };
+            });
+            
+            // Nếu đã có dữ liệu anomalies từ database, kết hợp với dữ liệu thực từ thiết bị
+            if (anomalies.length > 0) {
+              anomalies = [...anomalies, ...realFirewallAnomalies];
+            } else {
+              anomalies = realFirewallAnomalies;
             }
           }
+        } catch (mikrotikError) {
+          console.warn("Không thể lấy dữ liệu từ thiết bị Mikrotik:", mikrotikError);
+          // Không trả về lỗi, tiếp tục với dữ liệu có sẵn
         }
-      } catch (mikrotikError) {
-        console.warn("Không thể lấy dữ liệu từ thiết bị Mikrotik:", mikrotikError);
-        // Không trả về lỗi, tiếp tục với dữ liệu có sẵn
       }
       
       // Nếu không có dữ liệu real hoặc dữ liệu database, tạo dữ liệu mẫu chỉ để hiển thị UI
