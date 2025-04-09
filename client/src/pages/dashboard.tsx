@@ -200,7 +200,6 @@ const Dashboard = () => {
           <div className="grid grid-cols-1 gap-6">
             <InterfaceStatus deviceId={selectedDeviceId} />
             <DeviceInfo deviceId={selectedDeviceId} />
-            <ActiveAlerts deviceId={selectedDeviceId} />
           </div>
         </>
       ) : viewMode === 'advanced' ? (
@@ -217,9 +216,8 @@ const Dashboard = () => {
           {/* Interfaces Table */}
           <InterfaceTable deviceId={selectedDeviceId} />
           
-          {/* Alerts - Đã sắp xếp lại theo chiều dọc */}
+          {/* Device Info */}
           <div className="grid grid-cols-1 gap-6">
-            <ActiveAlerts deviceId={selectedDeviceId} />
             <DeviceInfo deviceId={selectedDeviceId} />
           </div>
           
