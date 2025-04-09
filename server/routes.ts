@@ -486,14 +486,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const deviceId = parseInt(req.params.id);
       const device = await storage.getDevice(deviceId);
       
-      if (!device || !device.hasCAPsMAN) {
-        return res.status(200).json([]);
+      if (!device) {
+        return res.status(404).json({ message: "Device not found" });
       }
       
-      const clients = await capsmanService.getCapsmanClientsByDevice(deviceId);
-      res.json(clients);
+      // Lấy danh sách ARP entries từ thiết bị Mikrotik
+      try {
+        const arpEntries = await mikrotikService.getArpEntries(deviceId);
+        
+        if (arpEntries && arpEntries.length > 0) {
+          // Map thông tin ARP entries sang định dạng phù hợp cho client
+          const networkDevices = arpEntries.map(entry => ({
+            id: entry.id, // Sử dụng ID từ bản ghi ARP
+            ipAddress: entry.address,
+            macAddress: entry.macAddress,
+            interface: entry.interface,
+            isOnline: entry.complete === 'yes',
+            deviceType: 'Unknown', // Mặc định
+            lastSeen: entry.lastSeen
+          }));
+          
+          console.log(`Đã lấy ${networkDevices.length} ARP entries từ thiết bị ${deviceId}`);
+          return res.json(networkDevices);
+        }
+      } catch (arpError) {
+        console.error(`Lỗi khi lấy ARP entries từ thiết bị ${deviceId}:`, arpError);
+      }
+      
+      // Nếu không có ARP entries hoặc lỗi, thử lấy từ CapsmanClients 
+      if (device.hasCAPsMAN) {
+        console.log("Không có ARP entries, lấy thông tin từ CAPsMAN clients");
+        const clients = await capsmanService.getCapsmanClientsByDevice(deviceId);
+        return res.json(clients || []);
+      }
+      
+      // Không có dữ liệu nào, trả về mảng rỗng
+      return res.status(200).json([]);
     } catch (error) {
-      console.error("Lỗi khi lấy danh sách clients theo thiết bị:", error);
+      console.error("Lỗi khi lấy danh sách clients/ARP entries theo thiết bị:", error);
       res.status(500).json({ message: "Failed to fetch clients by device" });
     }
   });
