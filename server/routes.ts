@@ -490,24 +490,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Device not found" });
       }
       
+      // Import service để lấy thông tin ARP
+      const { getDeviceArpTable, convertArpEntriesToNetworkDevices } = require('./services/arp-api');
+      
       // Lấy danh sách ARP entries từ thiết bị Mikrotik
       try {
-        const arpEntries = await mikrotikService.getArpEntries(deviceId);
+        const arpEntries = await getDeviceArpTable(deviceId);
         
         if (arpEntries && arpEntries.length > 0) {
-          // Map thông tin ARP entries sang định dạng phù hợp cho client
-          const networkDevices = arpEntries.map(entry => ({
-            id: entry.id, // Sử dụng ID từ bản ghi ARP
-            ipAddress: entry.address,
-            macAddress: entry.macAddress,
-            interface: entry.interface,
-            isOnline: entry.complete === 'yes',
-            deviceType: 'Unknown', // Mặc định
-            lastSeen: entry.lastSeen
-          }));
+          // Chuyển đổi thông tin ARP entries sang định dạng phù hợp cho client
+          const networkDevices = convertArpEntriesToNetworkDevices(arpEntries, deviceId);
           
           console.log(`Đã lấy ${networkDevices.length} ARP entries từ thiết bị ${deviceId}`);
           return res.json(networkDevices);
+        } else {
+          console.log(`Không có ARP entries trên thiết bị ${deviceId}`);
         }
       } catch (arpError) {
         console.error(`Lỗi khi lấy ARP entries từ thiết bị ${deviceId}:`, arpError);

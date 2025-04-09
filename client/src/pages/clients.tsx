@@ -180,14 +180,26 @@ const ClientsPage: React.FC = () => {
     try {
       setLoading(true);
       
-      // Tải từ API /api/devices/:id/clients 
+      // Tải từ API /api/devices/:id/clients để lấy dữ liệu ARP table
       const response = await axios.get(`/api/devices/${deviceId}/clients`);
       
       if (response.data && Array.isArray(response.data)) {
-        setClients(response.data);
+        console.log(`Nhận được ${response.data.length} thiết bị từ API`);
+        
+        // Thêm ID nếu chưa có để đảm bảo không gặp lỗi khi hiển thị
+        const clientsWithId = response.data.map((client: any, index: number) => {
+          if (!client.id) {
+            return { ...client, id: `temp-${index}` };
+          }
+          return client;
+        });
+        
+        setClients(clientsWithId);
       } else {
         // Tải từ API /api/clients nếu API trên không có dữ liệu
         const fallbackResponse = await axios.get('/api/clients');
+        console.log('Sử dụng API dự phòng');
+        
         if (fallbackResponse.data && Array.isArray(fallbackResponse.data)) {
           setClients(fallbackResponse.data);
         } else if (fallbackResponse.data && fallbackResponse.data.devices) {
