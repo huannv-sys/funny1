@@ -14,11 +14,11 @@ export async function getDeviceArpTable(deviceId: number): Promise<ArpEntry[]> {
   try {
     console.log(`Đang lấy bảng ARP từ thiết bị ${deviceId}...`);
     
-    // Import hàm getArpTable từ module mikrotik
-    const { getArpTable } = require('./mikrotik');
-    
-    // Gọi hàm getArpTable để lấy dữ liệu
-    const arpEntries = await getArpTable(deviceId);
+    // Gọi hàm getArpTable từ mikrotikService
+    const arpEntries = await mikrotikService.executeCommand(
+      deviceId,
+      '/ip/arp/print'
+    );
     
     console.log(`Đã lấy được ${arpEntries.length} bản ghi ARP từ thiết bị ${deviceId}`);
     

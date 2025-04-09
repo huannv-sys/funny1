@@ -23,6 +23,7 @@ import { interfaceHealthService } from "./services/interface_health";
 import { initLogAnalyzerService, getLogAnalyzerService } from './services/log-analyzer';
 import * as schema from "../shared/schema";
 import { networkDevices, networkTrafficFeatures, deviceMetrics } from "../shared/schema";
+import { getDeviceArpTable, convertArpEntriesToNetworkDevices } from './services/arp-api';
 import { db } from "./db";
 import { eq, asc } from "drizzle-orm";
 import { sql } from "drizzle-orm";
@@ -490,8 +491,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Device not found" });
       }
       
-      // Import service để lấy thông tin ARP
-      const { getDeviceArpTable, convertArpEntriesToNetworkDevices } = require('./services/arp-api');
+      // Import các hàm từ arp-api đã được thực hiện ở đầu file
       
       // Lấy danh sách ARP entries từ thiết bị Mikrotik
       try {
