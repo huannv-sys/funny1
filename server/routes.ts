@@ -1940,17 +1940,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const device = deviceResults[0];
       
-      // Tạo kết nối Mikrotik
-      const mikrotikClient = new MikrotikService();
-      mikrotikClient.setConfig(
-        device.ipAddress,
-        device.username,
-        device.password,
-        8728
-      );
-      
-      // Kết nối đến thiết bị
-      const connected = await mikrotikClient.connect();
+      // Kết nối đến thiết bị Mikrotik
+      const connected = await mikrotikService.connectToDevice(deviceId);
       if (!connected) {
         return res.status(500).json({
           success: false,
@@ -1958,9 +1949,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
+      const client = mikrotikService.getClientForDevice(deviceId);
+      if (!client) {
+        return res.status(500).json({
+          success: false,
+          message: `Không thể lấy client kết nối cho thiết bị ${device.name}`
+        });
+      }
+      
       // Lấy danh sách firewall filter rules
       try {
-        const filterRules = await mikrotikClient.executeCommand('/ip/firewall/filter/print');
+        const filterRules = await client.executeCommand('/ip/firewall/filter/print');
         
         console.log(`Đã tìm thấy ${filterRules.length} firewall filter rules từ thiết bị ${device.name}`);
         
@@ -2021,21 +2020,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const device = deviceResults[0];
       
-      // Tạo kết nối Mikrotik
-      const mikrotikClient = new MikrotikService();
-      mikrotikClient.setConfig(
-        device.ipAddress,
-        device.username,
-        device.password,
-        8728
-      );
-      
-      // Kết nối đến thiết bị
-      const connected = await mikrotikClient.connect();
+      // Kết nối đến thiết bị Mikrotik
+      const connected = await mikrotikService.connectToDevice(deviceId);
       if (!connected) {
         return res.status(500).json({
           success: false,
           message: `Không thể kết nối đến thiết bị ${device.name} (${device.ipAddress})`
+        });
+      }
+      
+      const client = mikrotikService.getClientForDevice(deviceId);
+      if (!client) {
+        return res.status(500).json({
+          success: false,
+          message: `Không thể lấy client kết nối cho thiết bị ${device.name}`
         });
       }
       
@@ -2050,7 +2048,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Thêm giới hạn số lượng bản ghi
         params.push({ "?limit": limit.toString() });
         
-        const logs = await mikrotikClient.executeCommand('/log/print', params);
+        const logs = await client.executeCommand('/log/print', params);
         
         console.log(`Đã tìm thấy ${logs.length} system logs từ thiết bị ${device.name}`);
         
