@@ -32,6 +32,16 @@ export interface PredictionResult {
   features?: Record<string, any>;
   anomalyType?: string;
   description?: string;
+  // Các trường mở rộng cho phân tích AI
+  aiEnhanced?: boolean;  // Đánh dấu kết quả có được cải thiện bởi AI không
+  aiDetails?: {
+    severity?: 'low' | 'medium' | 'high';
+    sourceIps?: string[];
+    targetIps?: string[];
+    recommendedAction?: string;
+    modelVersion?: string;
+    confidenceScore?: number;
+  };
 }
 
 // Khai báo các ngưỡng cho các quy tắc phát hiện

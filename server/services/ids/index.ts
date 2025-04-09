@@ -1,9 +1,12 @@
 /**
  * IDS Service
- * Rule-based Intrusion Detection System for MikroTik devices
+ * Advanced Intrusion Detection System for MikroTik devices
+ * Combines rule-based detection with AI-powered analysis
  */
 
 import { modelLoader, PredictionResult } from './model_loader';
+import { openaiIDSAdapter } from './openai_adapter';
+
 // Create a simple logger interface if the main logger is not available
 const logger = (() => {
   try {
@@ -25,6 +28,9 @@ const logger = (() => {
 import { db } from '../../db';
 import { networkTrafficFeatures, alerts, idsDetectionHistory } from '../../../shared/schema';
 import { eq, and, gte, lte, sql } from 'drizzle-orm';
+
+// Kiểm tra xem có thể sử dụng OpenAI không
+const useOpenAI = !!process.env.OPENAI_API_KEY;
 
 // Interface for traffic data to analyze
 export interface TrafficData {
@@ -85,8 +91,56 @@ export class IDSService {
       // Save traffic features to the database
       await this.saveTrafficFeatures(features, trafficData);
       
-      // Make prediction with rule-based engine
+      // Make prediction with rule-based engine first
       const result = await modelLoader.predict(features);
+      
+      // If OpenAI is available, enhance with AI analysis
+      if (useOpenAI) {
+        try {
+          logger.info(`Enhancing analysis with OpenAI: ${trafficData.sourceIp}:${trafficData.sourcePort} -> ${trafficData.destinationIp}:${trafficData.destinationPort}`);
+          
+          // Prepare data for OpenAI analysis
+          const trafficAnalysisData = {
+            sourceIp: trafficData.sourceIp,
+            destinationIp: trafficData.destinationIp,
+            sourcePort: trafficData.sourcePort,
+            destinationPort: trafficData.destinationPort,
+            protocol: trafficData.protocol,
+            bytes: trafficData.bytes,
+            packetCount: trafficData.packetCount,
+            flowDuration: trafficData.flowDuration,
+            timestamp: trafficData.timestamp.toISOString(),
+            features: features
+          };
+          
+          // Get enhanced analysis from OpenAI
+          const openaiResult = await openaiIDSAdapter.analyzeTrafficPatterns(trafficAnalysisData);
+          
+          // If OpenAI detected an anomaly and the rule-based system didn't, or if it has higher confidence,
+          // use the OpenAI result to update our prediction
+          if (openaiResult.anomaly_detected && (!result.isAnomaly || openaiResult.confidence > result.probability)) {
+            logger.info(`OpenAI detected anomaly with confidence ${openaiResult.confidence}: ${openaiResult.anomaly_type || 'Unknown type'}`);
+            
+            // Update the prediction result with OpenAI's findings
+            result.isAnomaly = true;
+            result.probability = openaiResult.confidence;
+            result.anomalyType = openaiResult.anomaly_type || result.anomalyType;
+            result.description = openaiResult.description || result.description;
+            
+            // Add additional OpenAI-specific details
+            result.aiEnhanced = true;
+            result.aiDetails = {
+              severity: openaiResult.severity,
+              sourceIps: openaiResult.source_ips,
+              targetIps: openaiResult.target_ips,
+              recommendedAction: openaiResult.recommended_action
+            };
+          }
+        } catch (aiError) {
+          // Log error but continue with rule-based result
+          logger.error(`Error in OpenAI analysis: ${aiError}`);
+        }
+      }
       
       // If it's an anomaly, create an alert
       if (result.isAnomaly) {
