@@ -68,24 +68,24 @@ const AlertsPage = () => {
   const getAlertColor = (severity: string) => {
     switch (severity) {
       case alertSeverity.ERROR:
-        return 'bg-red-50 border-red-100';
+        return 'bg-red-900 border-red-700 text-red-50';
       case alertSeverity.WARNING:
-        return 'bg-yellow-50 border-yellow-100';
+        return 'bg-amber-900 border-amber-700 text-amber-50';
       case alertSeverity.INFO:
       default:
-        return 'bg-blue-50 border-blue-100';
+        return 'bg-blue-900 border-blue-700 text-blue-50';
     }
   };
 
   const getAlertIconColor = (severity: string) => {
     switch (severity) {
       case alertSeverity.ERROR:
-        return 'text-red-500';
+        return 'text-red-300';
       case alertSeverity.WARNING:
-        return 'text-amber-500';
+        return 'text-amber-300';
       case alertSeverity.INFO:
       default:
-        return 'text-blue-500';
+        return 'text-blue-300';
     }
   };
 
@@ -150,7 +150,7 @@ const AlertsPage = () => {
           </div>
           <div className="flex items-center space-x-4">
             <Button 
-              variant="outline" 
+              variant="secondary" 
               onClick={() => setShowAcknowledged(!showAcknowledged)}
               className={showAcknowledged ? "bg-primary text-white hover:bg-primary/90" : ""}
             >
@@ -185,11 +185,11 @@ const AlertsPage = () => {
                     </div>
                     <div>
                       <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
-                        <h3 className="font-medium">{alert.message}</h3>
-                        <span className="text-sm text-gray-500">{getDeviceName(alert.deviceId)}</span>
+                        <h3 className="font-medium text-white">{alert.message}</h3>
+                        <span className="text-sm text-gray-200">{getDeviceName(alert.deviceId)}</span>
                       </div>
-                      <p className="text-sm text-gray-600 mt-1">{alert.source}</p>
-                      <p className="text-xs text-gray-500 mt-1">
+                      <p className="text-sm text-gray-300 mt-1">{alert.source}</p>
+                      <p className="text-xs text-gray-400 mt-1">
                         {formatAlertTime(alert.timestamp)}
                       </p>
                     </div>
@@ -197,9 +197,10 @@ const AlertsPage = () => {
                   {!showAcknowledged && (
                     <div className="mt-3 sm:mt-0">
                       <Button
-                        variant="outline"
+                        variant="secondary"
                         size="sm"
                         onClick={() => handleAcknowledgeAlert(alert.id)}
+                        className="bg-slate-800 hover:bg-slate-700 text-white"
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                           <path d="M20 6L9 17l-5-5"></path>
