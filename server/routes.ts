@@ -2185,7 +2185,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
           
           // Lấy dữ liệu lưu lượng từ các giao diện
-          const interfaces = await mikrotikService.getInterfaces();
+          const client = mikrotikService.getClientForDevice(deviceId);
+          if (!client) {
+            return res.status(500).json({
+              success: false,
+              message: `Không thể lấy client kết nối cho thiết bị ${device.name}`
+            });
+          }
+          
+          // Sử dụng phương thức executeCommand từ client
+          const interfaceData = await client.executeCommand('/interface/print');
+          
+          // Chuyển đổi thành mảng interfaces
+          const interfaces = interfaceData.map((iface: any) => ({
+            name: iface.name,
+            rxBytes: parseInt(iface['rx-byte'] || '0'),
+            txBytes: parseInt(iface['tx-byte'] || '0')
+          }));
           
           // Tổng hợp lưu lượng từ các giao diện
           let totalRxBytes = 0;
