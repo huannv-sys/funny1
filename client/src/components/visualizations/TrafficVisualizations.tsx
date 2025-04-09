@@ -28,6 +28,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import IDSAnalysisPanel from "@/components/visualizations/IDSAnalysisPanel";
 
 // Colors for visualization
 const COLORS = [
@@ -105,7 +106,7 @@ const TrafficVisualizations: React.FC<TrafficVisualizationsProps> = ({
 
   // Format the bandwidth data for visualization
   const formatBandwidthData = (): TrafficDataPoint[] => {
-    if (!trafficData || !trafficData.data) return [];
+    if (!trafficData?.data) return [];
     
     return trafficData.data.map((item: any) => ({
       timestamp: new Date(item.timestamp).toLocaleTimeString(),
@@ -117,7 +118,7 @@ const TrafficVisualizations: React.FC<TrafficVisualizationsProps> = ({
 
   // Format protocol data for visualization
   const formatProtocolData = (): Protocol[] => {
-    if (!protocolData || !protocolData.data) return [];
+    if (!protocolData?.data) return [];
     
     return protocolData.data.map((item: any, index: number) => ({
       name: item.protocol,
@@ -128,7 +129,7 @@ const TrafficVisualizations: React.FC<TrafficVisualizationsProps> = ({
 
   // Format source IP data for visualization
   const formatSourceData = (): SourceIP[] => {
-    if (!sourceData || !sourceData.data) return [];
+    if (!sourceData?.data) return [];
     
     return sourceData.data.map((item: any) => ({
       ip: item.ip,
@@ -139,7 +140,7 @@ const TrafficVisualizations: React.FC<TrafficVisualizationsProps> = ({
 
   // Format anomaly data for visualization
   const formatAnomalyData = (): AnomalyData[] => {
-    if (!anomalyData || !anomalyData.data) return [];
+    if (!anomalyData?.data) return [];
     
     return anomalyData.data.map((item: any) => ({
       timestamp: new Date(item.timestamp).toLocaleString(),
@@ -157,7 +158,7 @@ const TrafficVisualizations: React.FC<TrafficVisualizationsProps> = ({
 
   // Calculate summary statistics
   const getStatistics = () => {
-    if (!trafficData || !trafficData.data) {
+    if (!trafficData?.data) {
       return {
         totalDownload: 0,
         totalUpload: 0,
@@ -195,7 +196,7 @@ const TrafficVisualizations: React.FC<TrafficVisualizationsProps> = ({
 
   // Get the anomaly detection count and latest anomalies
   const getAnomalyStats = () => {
-    if (!anomalyData || !anomalyData.data) {
+    if (!anomalyData?.data) {
       return {
         count: 0,
         latestAnomalies: [],
@@ -227,29 +228,33 @@ const TrafficVisualizations: React.FC<TrafficVisualizationsProps> = ({
         {/* Time Range Selector */}
         <div className="flex justify-end mt-4 space-x-2">
           <Button 
-            variant={timeRange === "hour" ? "default" : "outline"} 
+            variant="outline" 
             size="sm"
+            className={timeRange === "hour" ? "bg-primary text-primary-foreground" : ""}
             onClick={() => handleTimeRangeChange("hour")}
           >
             1 Giờ
           </Button>
           <Button 
-            variant={timeRange === "day" ? "default" : "outline"} 
+            variant="outline" 
             size="sm"
+            className={timeRange === "day" ? "bg-primary text-primary-foreground" : ""}
             onClick={() => handleTimeRangeChange("day")}
           >
             1 Ngày
           </Button>
           <Button 
-            variant={timeRange === "week" ? "default" : "outline"} 
+            variant="outline" 
             size="sm"
+            className={timeRange === "week" ? "bg-primary text-primary-foreground" : ""}
             onClick={() => handleTimeRangeChange("week")}
           >
             1 Tuần
           </Button>
           <Button 
-            variant={timeRange === "month" ? "default" : "outline"} 
+            variant="outline" 
             size="sm"
+            className={timeRange === "month" ? "bg-primary text-primary-foreground" : ""}
             onClick={() => handleTimeRangeChange("month")}
           >
             1 Tháng
@@ -453,318 +458,39 @@ const TrafficVisualizations: React.FC<TrafficVisualizationsProps> = ({
 
         {/* Anomalies Tab */}
         <TabsContent value="anomalies">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-            <Card>
-              <CardContent className="pt-6">
-                <div className="text-2xl font-bold">{anomalyStats.count}</div>
-                <p className="text-sm text-gray-500">Tổng số xâm nhập phát hiện</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="pt-6">
-                <div className="text-2xl font-bold">
-                  {anomalyStats.latestAnomalies[0]?.source_ip || "N/A"}
-                </div>
-                <p className="text-sm text-gray-500">Nguồn xâm nhập gần nhất</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="pt-6">
-                <div className="text-2xl font-bold text-red-500">
-                  {anomalyStats.latestAnomalies[0]?.probability ? 
-                    `${(anomalyStats.latestAnomalies[0].probability * 100).toFixed(1)}%` : 
-                    "N/A"}
-                </div>
-                <p className="text-sm text-gray-500">Độ tin cậy của phát hiện gần nhất</p>
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle>Thống kê giao diện</CardTitle>
-                  <CardDescription>Phân phối lưu lượng qua các giao diện</CardDescription>
-                </div>
-                <div className="text-blue-600 cursor-pointer">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
-                  </svg>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={400}>
-                  <PieChart>
-                    <Pie
-                      data={[
-                        { name: "WAN", value: 75 },
-                        { name: "vlan99", value: 15 },
-                        { name: "vlan88", value: 10 }
-                      ]}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={80}
-                      outerRadius={150}
-                      fill="#8884d8"
-                      dataKey="value"
-                      nameKey="name"
-                      label={false}
-                    >
-                      {[
-                        { name: "WAN", value: 75, color: "#0088FE" },
-                        { name: "vlan99", value: 15, color: "#00C49F" },
-                        { name: "vlan88", value: 10, color: "#FF8042" }
-                      ].map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip formatter={(value) => [`${value}%`, '']} />
-                    <Legend verticalAlign="bottom" />
-                  </PieChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle>Firewall</CardTitle>
-                  <CardDescription>Lọc lưu lượng bởi tường lửa</CardDescription>
-                </div>
-                <div className="text-blue-600 cursor-pointer">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
-                  </svg>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={400}>
-                  <PieChart>
-                    <Pie
-                      data={[
-                        { name: "Default deny / state violation rule", value: 100 }
-                      ]}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={80}
-                      outerRadius={150}
-                      fill="#90CAF9"
-                      dataKey="value"
-                      nameKey="name"
-                      label={false}
-                    >
-                      <Cell fill="#90CAF9" />
-                    </Pie>
-                    <Tooltip formatter={(value) => [`${value}%`, '']} />
-                    <Legend verticalAlign="bottom" />
-                  </PieChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle>Services</CardTitle>
-                  <CardDescription>Trạng thái các dịch vụ hệ thống</CardDescription>
-                </div>
-                <div className="text-blue-600 cursor-pointer">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
-                  </svg>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <span>System Configuration Daemon</span>
-                    <div className="flex items-center">
-                      <div className="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
-                      </svg>
-                    </div>
-                  </div>
-                  
-                  <div className="flex justify-between items-center">
-                    <span>Cron</span>
-                    <div className="flex items-center">
-                      <div className="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
-                      </svg>
-                    </div>
-                  </div>
-                  
-                  <div className="flex justify-between items-center">
-                    <span>DHCP4 Server</span>
-                    <div className="flex items-center">
-                      <div className="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
-                      </svg>
-                    </div>
-                  </div>
-                  
-                  <div className="flex justify-between items-center">
-                    <span>Users and Groups</span>
-                    <div className="flex items-center">
-                      <div className="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
-                      </svg>
-                    </div>
-                  </div>
-                  
-                  <div className="flex justify-between items-center">
-                    <span>Network Time Daemon</span>
-                    <div className="flex items-center">
-                      <div className="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
-                      </svg>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle>Traffic Graph</CardTitle>
-                  <CardDescription>Biểu đồ lưu lượng mạng theo thời gian thực</CardDescription>
-                </div>
-                <div className="text-blue-600 cursor-pointer">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
-                  </svg>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-sm font-medium mb-1">Traffic In</p>
-                    <ResponsiveContainer width="100%" height={120}>
-                      <AreaChart
-                        data={[
-                          { time: '1', value: 5 },
-                          { time: '2', value: 10 },
-                          { time: '3', value: 7 },
-                          { time: '4', value: 15 },
-                          { time: '5', value: 12 },
-                          { time: '6', value: 28 },
-                          { time: '7', value: 5 },
-                          { time: '8', value: 10 },
-                          { time: '9', value: 7 },
-                          { time: '10', value: 35 },
-                          { time: '11', value: 18 },
-                          { time: '12', value: 5 }
-                        ]}
-                        margin={{ top: 0, right: 0, left: 0, bottom: 0 }}
-                      >
-                        <defs>
-                          <linearGradient id="colorTrafficIn" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#0088FE" stopOpacity={0.8}/>
-                            <stop offset="95%" stopColor="#0088FE" stopOpacity={0.1}/>
-                          </linearGradient>
-                        </defs>
-                        <YAxis domain={[0, 40]} hide />
-                        <Area type="monotone" dataKey="value" stroke="#0088FE" fillOpacity={1} fill="url(#colorTrafficIn)" />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                  
-                  <div>
-                    <p className="text-sm font-medium mb-1">Traffic Out</p>
-                    <ResponsiveContainer width="100%" height={120}>
-                      <AreaChart
-                        data={[
-                          { time: '1', value: 8 },
-                          { time: '2', value: 12 },
-                          { time: '3', value: 5 },
-                          { time: '4', value: 18 },
-                          { time: '5', value: 16 },
-                          { time: '6', value: 8 },
-                          { time: '7', value: 10 },
-                          { time: '8', value: 14 },
-                          { time: '9', value: 24 },
-                          { time: '10', value: 20 },
-                          { time: '11', value: 15 },
-                          { time: '12', value: 8 }
-                        ]}
-                        margin={{ top: 0, right: 0, left: 0, bottom: 0 }}
-                      >
-                        <defs>
-                          <linearGradient id="colorTrafficOut" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#00C49F" stopOpacity={0.8}/>
-                            <stop offset="95%" stopColor="#00C49F" stopOpacity={0.1}/>
-                          </linearGradient>
-                        </defs>
-                        <YAxis domain={[0, 40]} hide />
-                        <Area type="monotone" dataKey="value" stroke="#00C49F" fillOpacity={1} fill="url(#colorTrafficOut)" />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
           <div className="grid grid-cols-1 gap-6 mb-6">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle>Phát Hiện Xâm Nhập (IDS)</CardTitle>
-                  <CardDescription>Các cuộc tấn công tiềm năng được phát hiện bởi AI</CardDescription>
-                </div>
-                <div className="text-blue-600 cursor-pointer">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
-                  </svg>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {anomalyData && anomalyData.data && anomalyData.data.length > 0 ? (
-                  <div className="space-y-4">
-                    {formatAnomalyData().map((anomaly, index) => (
-                      <div key={index} className="border rounded-lg p-4">
-                        <div className="flex justify-between">
-                          <div className="font-medium">{anomaly.timestamp}</div>
-                          <div className={`font-bold ${anomaly.probability > 0.7 ? 'text-red-500' : anomaly.probability > 0.5 ? 'text-orange-500' : 'text-yellow-500'}`}>
-                            {(anomaly.probability * 100).toFixed(1)}% 
-                          </div>
-                        </div>
-                        <div className="mt-2">
-                          <div className="grid grid-cols-2 gap-2">
-                            <div>
-                              <span className="text-gray-500">Nguồn:</span> {anomaly.source_ip}
-                            </div>
-                            <div>
-                              <span className="text-gray-500">Đích:</span> {anomaly.destination_ip}
-                            </div>
-                          </div>
-                          <div className="mt-1">
-                            <span className="text-gray-500">Loại:</span> {anomaly.anomaly_type}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+            {/* IDS Analysis Panel */}
+            <IDSAnalysisPanel deviceId={deviceId} />
+            
+            {/* Summary Statistics */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="text-2xl font-bold">{anomalyStats.count}</div>
+                  <p className="text-sm text-gray-500">Tổng số xâm nhập phát hiện</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="text-2xl font-bold">
+                    {anomalyStats.latestAnomalies[0]?.source_ip || "N/A"}
                   </div>
-                ) : (
-                  <div className="text-center py-10">
-                    <p>Không có dữ liệu xâm nhập nào được phát hiện trong khoảng thời gian này.</p>
-                    <p className="text-sm text-gray-500 mt-2">Mô hình AI đang theo dõi các mẫu lưu lượng bất thường.</p>
+                  <p className="text-sm text-gray-500">Nguồn xâm nhập gần nhất</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="text-2xl font-bold text-red-500">
+                    {anomalyStats.latestAnomalies[0]?.probability ? 
+                      `${(anomalyStats.latestAnomalies[0].probability * 100).toFixed(1)}%` : 
+                      "N/A"}
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="grid grid-cols-1 gap-6">
+                  <p className="text-sm text-gray-500">Độ tin cậy của phát hiện gần nhất</p>
+                </CardContent>
+              </Card>
+            </div>
+            
+            {/* Test buttons for IDS */}
             <Card>
               <CardHeader>
                 <CardTitle>Mô Phỏng Kiểm Tra Xâm Nhập</CardTitle>
@@ -789,34 +515,92 @@ const TrafficVisualizations: React.FC<TrafficVisualizationsProps> = ({
 
                   <div className="flex space-x-2">
                     <Button 
-                      variant="secondary" 
-                      onClick={() => apiRequest("/api/security/test-scan-detection", {
-                        method: "POST",
-                        data: { deviceId, type: "port_scan" }
-                      })}
+                      variant="outline" 
+                      onClick={() => {
+                        apiRequest("/api/security/test-scan-detection", {
+                          method: "POST",
+                          data: { deviceId, type: "port_scan" }
+                        });
+                      }}
                     >
                       Mô Phỏng Port Scan
                     </Button>
                     <Button 
-                      variant="secondary" 
-                      onClick={() => apiRequest("/api/security/test-scan-detection", {
-                        method: "POST",
-                        data: { deviceId, type: "dos_attack" }
-                      })}
+                      variant="outline" 
+                      onClick={() => {
+                        apiRequest("/api/security/test-scan-detection", {
+                          method: "POST",
+                          data: { deviceId, type: "dos_attack" }
+                        });
+                      }}
                     >
                       Mô Phỏng DoS Attack
                     </Button>
                     <Button 
-                      variant="secondary" 
-                      onClick={() => apiRequest("/api/security/test-scan-detection", {
-                        method: "POST",
-                        data: { deviceId, type: "bruteforce" }
-                      })}
+                      variant="outline" 
+                      onClick={() => {
+                        apiRequest("/api/security/test-scan-detection", {
+                          method: "POST",
+                          data: { deviceId, type: "bruteforce" }
+                        });
+                      }}
                     >
                       Mô Phỏng Brute Force
                     </Button>
                   </div>
                 </div>
+              </CardContent>
+            </Card>
+            
+            {/* Historical Anomalies */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Lịch sử phát hiện xâm nhập</CardTitle>
+                <CardDescription>
+                  Các hoạt động đáng ngờ và xâm nhập đã phát hiện trước đây
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {formatAnomalyData().length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b">
+                          <th className="text-left p-2">Thời gian</th>
+                          <th className="text-left p-2">IP Nguồn</th>
+                          <th className="text-left p-2">IP Đích</th>
+                          <th className="text-left p-2">Xác suất</th>
+                          <th className="text-left p-2">Loại</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {formatAnomalyData().map((anomaly, index) => (
+                          <tr key={index} className="border-b">
+                            <td className="p-2">{anomaly.timestamp}</td>
+                            <td className="p-2">{anomaly.source_ip}</td>
+                            <td className="p-2">{anomaly.destination_ip}</td>
+                            <td className="p-2">
+                              {(anomaly.probability * 100).toFixed(1)}%
+                            </td>
+                            <td className="p-2">{anomaly.anomaly_type}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-12">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 text-gray-400 mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                      <path d="M12 8v4" />
+                      <path d="M12 16h.01" />
+                    </svg>
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">Không Phát Hiện Xâm Nhập</h3>
+                    <p className="text-sm text-gray-500 text-center">
+                      Chưa phát hiện hoạt động đáng ngờ hoặc xâm nhập nào. Hệ thống đang giám sát.
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>

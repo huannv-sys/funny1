@@ -2,6 +2,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from 'ws';
+import * as RouterOS from 'routeros-client';
 import { storage } from "./storage";
 import { 
   mikrotikService, 
@@ -1761,6 +1762,146 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({
         success: false,
         message: `Lỗi khi kiểm tra phát hiện xâm nhập: ${error instanceof Error ? error.message : String(error)}`
+      });
+    }
+  });
+  
+  // API phân tích lưu lượng thực từ thiết bị Mikrotik
+  router.post("/security/analyze-real-traffic", async (req: Request, res: Response) => {
+    try {
+      const deviceId = req.body.deviceId || 1;
+      
+      // Truy vấn thiết bị từ cơ sở dữ liệu
+      const deviceResults = await db.select().from(schema.devices).where(eq(schema.devices.id, deviceId)).limit(1);
+      const device = deviceResults[0];
+      
+      if (!device) {
+        return res.status(404).json({
+          success: false,
+          message: `Không tìm thấy thiết bị với ID: ${deviceId}`
+        });
+      }
+      
+      // Tạo tham số kết nối cho Mikrotik RouterOS
+      const connectionConfig = {
+        host: device.ipAddress, 
+        user: "admin", 
+        password: "Ictech1234%^", 
+        port: 8728,
+        timeout: 20000,
+        keepalive: true
+      };
+      
+      // Tạo kết nối đến thiết bị Mikrotik RouterOS
+      const connection = new RouterOS.RouterOSAPI(connectionConfig);
+      await connection.connect();
+      
+      // Lấy dữ liệu lưu lượng từ Mikrotik (Firewall connection tracking)
+      const connectionData = await connection.write('/ip/firewall/connection/print');
+      
+      console.log(`Đã nhận ${connectionData.length} kết nối từ thiết bị ${device.name}`);
+      
+      if (!connectionData || connectionData.length === 0) {
+        return res.json({
+          success: true,
+          message: "Không tìm thấy dữ liệu kết nối trên thiết bị",
+          data: { 
+            connectionCount: 0, 
+            analyzedCount: 0, 
+            anomalyCount: 0 
+          }
+        });
+      }
+      
+      // Chuyển đổi dữ liệu kết nối từ thiết bị thành dữ liệu lưu lượng để phân tích
+      const trafficEntries: import('./services/ids').TrafficData[] = [];
+      
+      for (const conn of connectionData) {
+        if (conn['protocol'] && conn['src-address'] && conn['dst-address']) {
+          const srcParts = conn['src-address'].split(':');
+          const dstParts = conn['dst-address'].split(':');
+          
+          const srcIp = srcParts[0];
+          const dstIp = dstParts[0];
+          const srcPort = parseInt(srcParts[1] || '0', 10);
+          const dstPort = parseInt(dstParts[1] || '0', 10);
+          
+          // Tính toán bytes và packet count từ các trường có sẵn
+          const txBytes = parseInt(conn['orig-bytes'] || '0', 10);
+          const rxBytes = parseInt(conn['repl-bytes'] || '0', 10);
+          const totalBytes = txBytes + rxBytes;
+          
+          const txPackets = parseInt(conn['orig-packets'] || '0', 10);
+          const rxPackets = parseInt(conn['repl-packets'] || '0', 10);
+          const totalPackets = txPackets + rxPackets;
+          
+          // Tính toán thời gian kết nối từ thời gian tạo (nếu có)
+          let flowDuration = 1000; // Mặc định 1 giây
+          if (conn['tcp-state'] || conn['timeout']) {
+            // Sử dụng timeout làm thời gian kết nối (tính bằng giây)
+            flowDuration = parseInt(conn['timeout'] || '60', 10) * 1000;
+          }
+          
+          trafficEntries.push({
+            sourceIp: srcIp,
+            destinationIp: dstIp,
+            sourcePort: srcPort,
+            destinationPort: dstPort,
+            protocol: conn['protocol'].toLowerCase(),
+            bytes: totalBytes,
+            packetCount: totalPackets,
+            flowDuration: flowDuration,
+            timestamp: new Date(),
+            deviceId: deviceId
+          });
+        }
+      }
+      
+      console.log(`Đã tạo ${trafficEntries.length} mục dữ liệu lưu lượng cho phân tích`);
+      
+      // Phân tích dữ liệu lưu lượng
+      const results = await Promise.all(
+        trafficEntries.map(data => idsService.analyzeTraffic(data))
+      );
+      
+      // Lọc các kết quả bất thường
+      const anomalies = results.filter(r => r && r.isAnomaly);
+      
+      // Chuẩn bị kết quả phân tích chi tiết
+      const anomalyDetails = anomalies.map((a, index) => {
+        const trafficEntry = trafficEntries[results.indexOf(a)];
+        
+        return {
+          id: index + 1,
+          sourceIp: trafficEntry.sourceIp,
+          destinationIp: trafficEntry.destinationIp,
+          sourcePort: trafficEntry.sourcePort,
+          destinationPort: trafficEntry.destinationPort,
+          protocol: trafficEntry.protocol,
+          probability: a?.probability,
+          anomalyType: a?.anomalyType,
+          description: a?.description,
+          timestamp: a?.timestamp
+        };
+      });
+      
+      res.json({
+        success: true,
+        message: `Phân tích hoàn tất. Phát hiện ${anomalies.length}/${trafficEntries.length} bất thường`,
+        data: {
+          connectionCount: connectionData.length,
+          analyzedCount: trafficEntries.length,
+          anomalyCount: anomalies.length,
+          anomalyPercentage: trafficEntries.length > 0 ? (anomalies.length / trafficEntries.length) * 100 : 0,
+          anomalies: anomalyDetails
+        }
+      });
+      
+    } catch (error) {
+      console.error("Lỗi khi phân tích lưu lượng thực:", error);
+      res.status(500).json({
+        success: false,
+        message: `Lỗi khi phân tích lưu lượng thực: ${error instanceof Error ? error.message : String(error)}`
       });
     }
   });

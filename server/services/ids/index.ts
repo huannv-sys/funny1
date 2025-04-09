@@ -1,6 +1,6 @@
 /**
  * IDS Service
- * AI-based Intrusion Detection System for MikroTik devices
+ * Rule-based Intrusion Detection System for MikroTik devices
  */
 
 import { modelLoader, PredictionResult } from './model_loader';
@@ -41,7 +41,7 @@ export interface TrafficData {
 }
 
 /**
- * IDS service for detecting intrusions using AI
+ * IDS service for detecting intrusions using rule-based system
  */
 export class IDSService {
   private isInitialized: boolean = false;
@@ -60,7 +60,7 @@ export class IDSService {
         this.isInitialized = true;
         logger.info('IDS Service initialized successfully');
       } else {
-        logger.error('IDS Service initialization failed: Model not ready');
+        logger.error('IDS Service initialization failed: Rule engine not ready');
       }
     } catch (error) {
       logger.error(`IDS Service initialization error: ${error}`);
@@ -74,8 +74,8 @@ export class IDSService {
    */
   public async analyzeTraffic(trafficData: TrafficData): Promise<PredictionResult | null> {
     if (!this.isInitialized) {
-      logger.error('IDS Service not initialized');
-      return null;
+      logger.warn('IDS Service not initialized, analyzing with basic rules');
+      // Continue with analysis even if not fully initialized
     }
 
     try {
@@ -85,7 +85,7 @@ export class IDSService {
       // Save traffic features to the database
       await this.saveTrafficFeatures(features, trafficData);
       
-      // Make prediction
+      // Make prediction with rule-based engine
       const result = await modelLoader.predict(features);
       
       // If it's an anomaly, create an alert
@@ -101,11 +101,16 @@ export class IDSService {
   }
 
   /**
-   * Extract ML features from traffic data
+   * Extract features from traffic data
    * @param trafficData The traffic data
    */
   private extractFeatures(trafficData: TrafficData): Record<string, number> {
-    // Map from traffic data to the features required by the ML model
+    // Calculate derived features to help with detection
+    const bytesPerPacket = trafficData.packetCount > 0 ? trafficData.bytes / trafficData.packetCount : 0;
+    const packetsPerSecond = trafficData.flowDuration > 0 ? trafficData.packetCount / (trafficData.flowDuration / 1000) : 0;
+    const bytesPerSecond = trafficData.flowDuration > 0 ? trafficData.bytes / (trafficData.flowDuration / 1000) : 0;
+    
+    // Map from traffic data to the features required by the rule engine
     const features: Record<string, number> = {
       'Destination Port': trafficData.destinationPort,
       'Flow Duration': trafficData.flowDuration,
@@ -115,25 +120,25 @@ export class IDSService {
       'Total Length of Bwd Packets': Math.floor(trafficData.bytes / 2), // Approximation
       'Fwd Packet Length Max': 1500, // Default MTU
       'Fwd Packet Length Min': 64, // Minimum Ethernet frame
-      'Fwd Packet Length Mean': Math.floor((trafficData.bytes / 2) / (trafficData.packetCount / 2)), // Avg packet size
+      'Fwd Packet Length Mean': bytesPerPacket / 2, // Approximation
       'Fwd Packet Length Std': 200, // Approximation
       'Bwd Packet Length Max': 1500, // Default MTU
       'Bwd Packet Length Min': 64, // Minimum Ethernet frame
-      'Bwd Packet Length Mean': Math.floor((trafficData.bytes / 2) / (trafficData.packetCount / 2)), // Avg packet size
+      'Bwd Packet Length Mean': bytesPerPacket / 2, // Approximation
       'Bwd Packet Length Std': 200, // Approximation
-      'Flow Bytes/s': trafficData.flowDuration > 0 ? trafficData.bytes / (trafficData.flowDuration / 1000) : 0,
-      'Flow Packets/s': trafficData.flowDuration > 0 ? trafficData.packetCount / (trafficData.flowDuration / 1000) : 0,
-      'Flow IAT Mean': trafficData.flowDuration / trafficData.packetCount,
+      'Flow Bytes/s': bytesPerSecond,
+      'Flow Packets/s': packetsPerSecond,
+      'Flow IAT Mean': trafficData.packetCount > 1 ? trafficData.flowDuration / (trafficData.packetCount - 1) : trafficData.flowDuration,
       'Flow IAT Std': 100, // Approximation
       'Flow IAT Max': trafficData.flowDuration,
       'Flow IAT Min': 1,
       'Fwd IAT Total': trafficData.flowDuration / 2, // Approximation
-      'Fwd IAT Mean': trafficData.flowDuration / trafficData.packetCount,
+      'Fwd IAT Mean': trafficData.packetCount > 1 ? trafficData.flowDuration / (trafficData.packetCount - 1) : trafficData.flowDuration,
       'Fwd IAT Std': 50, // Approximation
       'Fwd IAT Max': trafficData.flowDuration / 2,
       'Fwd IAT Min': 1,
       'Bwd IAT Total': trafficData.flowDuration / 2, // Approximation
-      'Bwd IAT Mean': trafficData.flowDuration / trafficData.packetCount,
+      'Bwd IAT Mean': trafficData.packetCount > 1 ? trafficData.flowDuration / (trafficData.packetCount - 1) : trafficData.flowDuration,
       'Bwd IAT Std': 50, // Approximation
       'Bwd IAT Max': trafficData.flowDuration / 2,
       'Bwd IAT Min': 1,
@@ -144,11 +149,11 @@ export class IDSService {
       'Bwd URG Flags': 0,
       'Fwd Header Length': trafficData.protocol === 'tcp' ? 20 * (trafficData.packetCount / 2) : 0,
       'Bwd Header Length': trafficData.protocol === 'tcp' ? 20 * (trafficData.packetCount / 2) : 0,
-      'Fwd Packets/s': trafficData.flowDuration > 0 ? (trafficData.packetCount / 2) / (trafficData.flowDuration / 1000) : 0,
-      'Bwd Packets/s': trafficData.flowDuration > 0 ? (trafficData.packetCount / 2) / (trafficData.flowDuration / 1000) : 0,
+      'Fwd Packets/s': packetsPerSecond / 2,
+      'Bwd Packets/s': packetsPerSecond / 2,
       'Min Packet Length': 64,
       'Max Packet Length': 1500,
-      'Packet Length Mean': trafficData.bytes / trafficData.packetCount,
+      'Packet Length Mean': bytesPerPacket,
       'Packet Length Std': 300, // Approximation
       'Packet Length Variance': 90000, // Approximation (300^2)
       // TCP flags for classification
@@ -161,9 +166,16 @@ export class IDSService {
       'CWE Flag Count': 0,
       'ECE Flag Count': 0,
       'Down/Up Ratio': 1, // Assuming symmetric traffic
-      'Average Packet Size': trafficData.bytes / trafficData.packetCount,
-      'Avg Fwd Segment Size': (trafficData.bytes / 2) / (trafficData.packetCount / 2),
-      'Avg Bwd Segment Size': (trafficData.bytes / 2) / (trafficData.packetCount / 2),
+      'Average Packet Size': bytesPerPacket,
+      'Avg Fwd Segment Size': bytesPerPacket / 2,
+      'Avg Bwd Segment Size': bytesPerPacket / 2,
+      
+      // Additional calculated metrics for rule-based system
+      'Total Packets': trafficData.packetCount,
+      'Total Bytes': trafficData.bytes,
+      'Bytes Per Second': bytesPerSecond,
+      'Packets Per Second': packetsPerSecond,
+      'Bytes Per Packet': bytesPerPacket
     };
 
     return features;
@@ -190,7 +202,7 @@ export class IDSService {
         analyzedAt: new Date()
       });
       
-      logger.info(`Saved traffic features for ${trafficData.sourceIp}:${trafficData.sourcePort} -> ${trafficData.destinationIp}:${trafficData.destinationPort}`);
+      logger.debug(`Saved traffic features for ${trafficData.sourceIp}:${trafficData.sourcePort} -> ${trafficData.destinationIp}:${trafficData.destinationPort}`);
     } catch (error) {
       logger.error(`Error saving traffic features: ${error}`);
     }
@@ -203,7 +215,12 @@ export class IDSService {
    */
   private async createAlert(result: PredictionResult, trafficData: TrafficData): Promise<void> {
     try {
-      const alertMessage = `Possible intrusion detected: ${trafficData.sourceIp}:${trafficData.sourcePort} -> ${trafficData.destinationIp}:${trafficData.destinationPort} (${trafficData.protocol.toUpperCase()})`;
+      // Create a more detailed message if we have anomaly type information
+      let alertMessage = `Possible intrusion detected: ${trafficData.sourceIp}:${trafficData.sourcePort} -> ${trafficData.destinationIp}:${trafficData.destinationPort} (${trafficData.protocol.toUpperCase()})`;
+      
+      if (result.anomalyType) {
+        alertMessage = `${result.anomalyType}: ${result.description || alertMessage}`;
+      }
       
       const alertResult = await db.insert(alerts).values({
         deviceId: trafficData.deviceId,
@@ -211,7 +228,7 @@ export class IDSService {
         message: alertMessage,
         acknowledged: false,
         timestamp: new Date(),
-        source: 'ai_ids'
+        source: 'ids'
       }).returning();
       
       // If alert was created, also store in IDS detection history
@@ -244,7 +261,9 @@ export class IDSService {
               protocol: trafficData.protocol,
               flowDuration: trafficData.flowDuration,
               bytes: trafficData.bytes,
-              packetCount: trafficData.packetCount
+              packetCount: trafficData.packetCount,
+              anomalyType: result.anomalyType || 'UNKNOWN',
+              description: result.description || 'Unknown anomaly detected'
             }
           });
           
@@ -257,12 +276,14 @@ export class IDSService {
                 deviceId: trafficData.deviceId,
                 message: alertMessage,
                 severity: 'error',
-                source: 'ai_ids',
+                source: 'ids',
                 details: {
                   sourceIp: trafficData.sourceIp,
                   destinationIp: trafficData.destinationIp,
                   probability: result.probability,
-                  timestamp: new Date().toISOString()
+                  timestamp: new Date().toISOString(),
+                  anomalyType: result.anomalyType || 'UNKNOWN',
+                  description: result.description || 'Unknown anomaly'
                 }
               }
             };
