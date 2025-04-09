@@ -2021,17 +2021,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       try {
-        // Khởi tạo Mikrotik service
-        const mikrotikService = new MikrotikService(device);
-        await mikrotikService.connect();
+        // Khởi tạo và sử dụng Mikrotik service từ singleton 
+        const connected = await mikrotikService.connectToDevice(device.id);
         
         // Lấy danh sách giao diện
         const interfaces = await mikrotikService.getInterfaces();
         
         // Tính toán thống kê lưu lượng theo giao diện
         const interfaceStats = interfaces.map(iface => {
-          const txBytes = parseInt(iface.txBytes || '0');
-          const rxBytes = parseInt(iface.rxBytes || '0');
+          const txBytes = iface.txBytes || 0;
+          const rxBytes = iface.rxBytes || 0;
           const totalBytes = txBytes + rxBytes;
           
           return {
@@ -2057,7 +2056,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .sort((a, b) => b.totalBytes - a.totalBytes)
           .slice(0, 5);
         
-        await mikrotikService.disconnect();
+        await mikrotikService.disconnectFromDevice(device.id);
         
         res.json({
           success: true,
@@ -2146,11 +2145,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const broadcastToTopic = (topic: string, data: any) => {
     const message = JSON.stringify(data);
     
-    for (const [client, topics] of clients.entries()) {
+    // Sử dụng Array.from để khắc phục lỗi với '--downlevelIteration'
+    Array.from(clients.entries()).forEach(([client, topics]) => {
       if (client.readyState === WebSocket.OPEN && topics.has(topic)) {
         client.send(message);
       }
-    }
+    });
   };
   
   // Expose broadcast function globally

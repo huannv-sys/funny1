@@ -11,7 +11,7 @@ import { alertSeverity } from "@shared/schema";
 import { wirelessService } from "./wireless";
 import { capsmanService } from "./capsman";
 import { deviceInfoService } from "./device_info";
-import { ArpEntry, DhcpLease, NetworkDeviceDetails } from '../mikrotik-api-types';
+import { ArpEntry, DhcpLease, NetworkDeviceDetails, MikrotikInterface } from '../mikrotik-api-types';
 
 // Sử dụng thư viện node-routeros để kết nối với RouterOS
 import * as RouterOS from 'node-routeros';
@@ -178,6 +178,42 @@ class MikrotikClient {
     this.connected = false;
   }
 
+  // Hàm execute với tham số là mảng các chuỗi
+  async execute(command: string, params: string[] = []): Promise<any> {
+    if (!this.connected || !this.connection) {
+      throw new Error(`Not connected to RouterOS device ${this.ipAddress}`);
+    }
+    
+    try {
+      console.log(`Executing command: ${command}`);
+      
+      // Chuẩn bị command
+      const fullCommand = command.startsWith('/') ? command : `/${command}`;
+      
+      // Chuyển đổi params thành đối tượng query
+      const apiParams = params.reduce((obj, param) => {
+        if (param.includes('=')) {
+          const [key, value] = param.split('=', 2);
+          obj[key] = value;
+        }
+        return obj;
+      }, {} as Record<string, string>);
+      
+      // Thực thi lệnh
+      const result = await this.connection.write(fullCommand, apiParams);
+      
+      // Xử lý kết quả để tránh undefined/null/NaN
+      const processedResult = Array.isArray(result) 
+        ? result.map((item: any) => this.sanitizeObjectValues(item))
+        : this.sanitizeObjectValues(result);
+      
+      return processedResult;
+    } catch (error) {
+      console.error(`Failed to execute command ${command}:`, error);
+      throw error;
+    }
+  }
+  
   async executeCommand(command: string, params: any[] = []): Promise<any> {
     if (!this.connected || !this.connection) {
       throw new Error(`Not connected to RouterOS device ${this.ipAddress}`);
@@ -274,6 +310,85 @@ import * as net from 'net';
 
 export class MikrotikService {
   private clients: Map<number, MikrotikClient> = new Map();
+  
+  /**
+   * Lấy danh sách giao diện mạng từ thiết bị MikroTik với thông tin lưu lượng
+   * @returns Array of interfaces with traffic stats
+   */
+  async getInterfaces(): Promise<MikrotikInterface[]> {
+    try {
+      // Kiểm tra xem có client nào đang kết nối
+      if (this.clients.size === 0) {
+        console.error('No connected MikroTik devices');
+        return [];
+      }
+      
+      // Lấy client đầu tiên (thường chỉ có một thiết bị kết nối)
+      // Sử dụng Array.from để khắc phục lỗi với '--downlevelIteration'
+      const clientsArray = Array.from(this.clients.keys());
+      if (clientsArray.length === 0) {
+        console.error('Empty clients array after conversion');
+        return [];
+      }
+      
+      const deviceId = clientsArray[0];
+      const client = this.clients.get(deviceId);
+      
+      if (!client) {
+        throw new Error('Invalid MikroTik client');
+      }
+      
+      // Lấy thông tin giao diện từ thiết bị
+      const interfaces = await client.execute('/interface/print');
+      
+      // Lấy thêm thông tin lưu lượng
+      const trafficData = await client.execute('/interface/monitor-traffic', 
+        [
+          '=interface=all',
+          '=once='
+        ]
+      );
+      
+      console.log('Interface data from MikroTik:', interfaces);
+      console.log('Traffic data from MikroTik:', trafficData);
+      
+      // Xử lý dữ liệu để trả về các giao diện với thông tin lưu lượng
+      const result: MikrotikInterface[] = interfaces.map((iface: any) => {
+        // Tìm dữ liệu lưu lượng tương ứng
+        const traffic = Array.isArray(trafficData) 
+          ? trafficData.find((t: any) => t.name === iface.name)
+          : null;
+        
+        return {
+          id: iface['.id'] || '',
+          name: iface.name || '',
+          type: iface.type || '',
+          mtu: parseInt(iface.mtu || '0'),
+          actualMtu: parseInt(iface['actual-mtu'] || '0'),
+          l2mtu: parseInt(iface.l2mtu || '0'),
+          macAddress: iface['mac-address'] || '',
+          running: iface.running === 'true',
+          disabled: iface.disabled === 'true',
+          comment: iface.comment || '',
+          txPackets: parseInt(traffic?.['tx-packets'] || '0'),
+          rxPackets: parseInt(traffic?.['rx-packets'] || '0'),
+          txBytes: parseInt(traffic?.['tx-byte'] || '0'),
+          rxBytes: parseInt(traffic?.['rx-byte'] || '0'),
+          txDrops: parseInt(traffic?.['tx-drops'] || '0'),
+          rxDrops: parseInt(traffic?.['rx-drops'] || '0'),
+          txErrors: parseInt(traffic?.['tx-errors'] || '0'),
+          rxErrors: parseInt(traffic?.['rx-errors'] || '0'),
+          lastLinkUpTime: iface['last-link-up-time'] || '',
+          linkDowns: parseInt(iface['link-downs'] || '0')
+        };
+      });
+      
+      return result;
+    } catch (error) {
+      console.error('Error getting interfaces from MikroTik:', error);
+      return [];
+    }
+  }
   
   /**
    * Lấy danh sách các bản ghi ARP từ thiết bị MikroTik
@@ -1480,9 +1595,10 @@ export class MikrotikService {
           
           // Hiển thị thông tin
           console.log(`Address list statistics:`);
-          for (const [list, count] of listCounts.entries()) {
+          // Sử dụng Array.from để khắc phục lỗi với '--downlevelIteration'
+          Array.from(listCounts.entries()).forEach(([list, count]) => {
             console.log(`- ${list}: ${count} entries`);
-          }
+          });
         }
       } catch (addrError) {
         console.warn(`Error collecting address lists:`, addrError);
