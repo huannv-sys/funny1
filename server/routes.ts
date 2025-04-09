@@ -1786,11 +1786,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // API phân tích lưu lượng thực từ thiết bị Mikrotik
   router.post("/security/analyze-real-traffic", async (req: Request, res: Response) => {
     try {
-      const deviceId = req.body.deviceId || 1;
+      const deviceId = parseInt(req.body.deviceId || '1');
       
-      // Truy vấn thiết bị từ cơ sở dữ liệu
-      const deviceResults = await db.select().from(schema.devices).where(eq(schema.devices.id, deviceId)).limit(1);
-      const device = deviceResults[0];
+      // Lấy thông tin thiết bị từ storage service
+      const device = await storage.getDevice(deviceId);
       
       if (!device) {
         return res.status(404).json({
@@ -1799,22 +1798,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      // Tạo tham số kết nối cho Mikrotik RouterOS
-      const connectionConfig = {
-        host: device.ipAddress, 
-        user: "admin", 
-        password: "Ictech1234%^", 
-        port: 8728,
-        timeout: 20000,
-        keepalive: true
-      };
+      try {
       
-      // Tạo kết nối đến thiết bị Mikrotik RouterOS
-      const connection = new RouterOS.RouterOSAPI(connectionConfig);
-      await connection.connect();
+      // Kết nối đến thiết bị Mikrotik
+      const connected = await mikrotikService.connectToDevice(deviceId);
+      if (!connected) {
+        return res.status(500).json({
+          success: false,
+          message: `Không thể kết nối đến thiết bị ${device.name} (${device.ipAddress})`
+        });
+      }
+      
+      // Lấy client kết nối
+      const client = mikrotikService.getClientForDevice(deviceId);
+      if (!client) {
+        return res.status(500).json({
+          success: false,
+          message: `Không thể lấy client kết nối cho thiết bị ${device.name}`
+        });
+      }
       
       // Lấy dữ liệu lưu lượng từ Mikrotik (Firewall connection tracking)
-      const connectionData = await connection.write('/ip/firewall/connection/print');
+      const connectionData = await client.executeCommand('/ip/firewall/connection/print');
       
       console.log(`Đã nhận ${connectionData.length} kết nối từ thiết bị ${device.name}`);
       
@@ -1914,6 +1919,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       });
       
+    } catch (err) {
+      console.error(`Lỗi trong phân tích:`, err);
+      res.status(500).json({
+        success: false,
+        message: `Lỗi trong quá trình phân tích: ${err instanceof Error ? err.message : String(err)}`
+      });
+    } finally {
+      // Ngắt kết nối đến thiết bị khi hoàn thành
+      await mikrotikService.disconnectFromDevice(deviceId);
+    }
+    
     } catch (error) {
       console.error("Lỗi khi phân tích lưu lượng thực:", error);
       res.status(500).json({
@@ -1928,43 +1944,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const deviceId = parseInt(req.params.id);
       
-      // Truy vấn thiết bị từ cơ sở dữ liệu
-      const deviceResults = await db.select().from(schema.devices).where(eq(schema.devices.id, deviceId)).limit(1);
+      // Lấy thông tin thiết bị từ storage service
+      const device = await storage.getDevice(deviceId);
       
-      if (!deviceResults || deviceResults.length === 0) {
+      if (!device) {
         return res.status(404).json({
           success: false,
           message: `Không tìm thấy thiết bị với ID ${deviceId}`
         });
       }
       
-      const device = deviceResults[0];
-      
-      // Kết nối đến thiết bị Mikrotik
-      const connected = await mikrotikService.connectToDevice(deviceId);
-      if (!connected) {
-        return res.status(500).json({
-          success: false,
-          message: `Không thể kết nối đến thiết bị ${device.name} (${device.ipAddress})`
-        });
-      }
-      
-      const client = mikrotikService.getClientForDevice(deviceId);
-      if (!client) {
-        return res.status(500).json({
-          success: false,
-          message: `Không thể lấy client kết nối cho thiết bị ${device.name}`
-        });
-      }
-      
-      // Lấy danh sách firewall filter rules
       try {
+        // Kết nối đến thiết bị Mikrotik
+        const connected = await mikrotikService.connectToDevice(deviceId);
+        if (!connected) {
+          return res.status(500).json({
+            success: false,
+            message: `Không thể kết nối đến thiết bị ${device.name} (${device.ipAddress})`
+          });
+        }
+        
+        // Lấy client kết nối
+        const client = mikrotikService.getClientForDevice(deviceId);
+        if (!client) {
+          return res.status(500).json({
+            success: false,
+            message: `Không thể lấy client kết nối cho thiết bị ${device.name}`
+          });
+        }
+        
+        // Lấy danh sách firewall filter rules từ thiết bị
         const filterRules = await client.executeCommand('/ip/firewall/filter/print');
         
         console.log(`Đã tìm thấy ${filterRules.length} firewall filter rules từ thiết bị ${device.name}`);
         
-        // Chuyển đổi dữ liệu để dễ sử dụng ở client
-        const formattedRules = filterRules.map((rule: any) => {
+        // Lấy thêm thông tin NAT rules
+        const natRules = await client.executeCommand('/ip/firewall/nat/print');
+        
+        console.log(`Đã tìm thấy ${natRules.length} firewall NAT rules từ thiết bị ${device.name}`);
+        
+        // Lấy thêm thông tin Address Lists
+        const addressLists = await client.executeCommand('/ip/firewall/address-list/print');
+        
+        console.log(`Đã tìm thấy ${addressLists.length} address lists từ thiết bị ${device.name}`);
+        
+        // Định dạng lại filter rules
+        const formattedFilterRules = filterRules.map((rule: any) => {
           return {
             id: rule['.id'] || '',
             chain: rule['chain'] || '',
@@ -1974,23 +1999,68 @@ export async function registerRoutes(app: Express): Promise<Server> {
             dstAddress: rule['dst-address'] || '',
             srcPort: rule['src-port'] || '',
             dstPort: rule['dst-port'] || '',
+            inInterface: rule['in-interface'] || '',
+            outInterface: rule['out-interface'] || '',
             comment: rule['comment'] || '',
             disabled: rule['disabled'] === 'true',
             dynamic: rule['dynamic'] === 'true',
-            invalid: rule['invalid'] === 'true'
+            invalid: rule['invalid'] === 'true',
+            connectionState: rule['connection-state'] || '',
+            connectionNat: rule['connection-nat-state'] || '',
+            rawData: rule // Lưu trữ dữ liệu thô để phân tích nâng cao
           };
         });
         
+        // Định dạng lại NAT rules
+        const formattedNatRules = natRules.map((rule: any) => {
+          return {
+            id: rule['.id'] || '',
+            chain: rule['chain'] || '',
+            action: rule['action'] || '',
+            protocol: rule['protocol'] || 'any',
+            srcAddress: rule['src-address'] || '',
+            dstAddress: rule['dst-address'] || '',
+            srcPort: rule['src-port'] || '',
+            dstPort: rule['dst-port'] || '',
+            toAddresses: rule['to-addresses'] || '',
+            toPorts: rule['to-ports'] || '',
+            comment: rule['comment'] || '',
+            disabled: rule['disabled'] === 'true',
+            rawData: rule
+          };
+        });
+        
+        // Định dạng lại address lists
+        const formattedAddressLists = addressLists.map((entry: any) => {
+          return {
+            id: entry['.id'] || '',
+            list: entry['list'] || '',
+            address: entry['address'] || '',
+            timeout: entry['timeout'] || '',
+            dynamic: entry['dynamic'] === 'true',
+            disabled: entry['disabled'] === 'true',
+            comment: entry['comment'] || ''
+          };
+        });
+        
+        // Gửi kết quả kết hợp tất cả dữ liệu firewall
         res.json({
           success: true,
-          data: formattedRules
+          data: {
+            filterRules: formattedFilterRules,
+            natRules: formattedNatRules,
+            addressLists: formattedAddressLists
+          }
         });
       } catch (err) {
-        console.error(`Lỗi khi lấy firewall filter rules:`, err);
+        console.error(`Lỗi khi lấy firewall rules:`, err);
         res.status(500).json({
           success: false,
-          message: `Lỗi khi lấy firewall filter rules: ${err instanceof Error ? err.message : String(err)}`
+          message: `Lỗi khi lấy firewall rules: ${err instanceof Error ? err.message : String(err)}`
         });
+      } finally {
+        // Ngắt kết nối đến thiết bị khi hoàn thành
+        await mikrotikService.disconnectFromDevice(deviceId);
       }
     } catch (error) {
       console.error(`Lỗi xử lý request:`, error);
@@ -2008,38 +2078,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const topics = req.query.topics as string || '';
       const limit = parseInt(req.query.limit as string || '100');
       
-      // Truy vấn thiết bị từ cơ sở dữ liệu
-      const deviceResults = await db.select().from(schema.devices).where(eq(schema.devices.id, deviceId)).limit(1);
+      // Lấy thông tin thiết bị từ cơ sở dữ liệu
+      const device = await storage.getDevice(deviceId);
       
-      if (!deviceResults || deviceResults.length === 0) {
+      if (!device) {
         return res.status(404).json({
           success: false,
           message: `Không tìm thấy thiết bị với ID ${deviceId}`
         });
       }
       
-      const device = deviceResults[0];
-      
-      // Kết nối đến thiết bị Mikrotik
-      const connected = await mikrotikService.connectToDevice(deviceId);
-      if (!connected) {
-        return res.status(500).json({
-          success: false,
-          message: `Không thể kết nối đến thiết bị ${device.name} (${device.ipAddress})`
-        });
-      }
-      
-      const client = mikrotikService.getClientForDevice(deviceId);
-      if (!client) {
-        return res.status(500).json({
-          success: false,
-          message: `Không thể lấy client kết nối cho thiết bị ${device.name}`
-        });
-      }
-      
-      // Lấy system logs
       try {
-        // Chuẩn bị tham số để lọc theo topics nếu có yêu cầu
+        // Kết nối đến thiết bị Mikrotik
+        const connected = await mikrotikService.connectToDevice(deviceId);
+        if (!connected) {
+          return res.status(500).json({
+            success: false,
+            message: `Không thể kết nối đến thiết bị ${device.name} (${device.ipAddress})`
+          });
+        }
+        
+        // Lấy client kết nối từ service
+        const client = mikrotikService.getClientForDevice(deviceId);
+        if (!client) {
+          return res.status(500).json({
+            success: false,
+            message: `Không thể lấy client kết nối cho thiết bị ${device.name}`
+          });
+        }
+        
+        // Chuẩn bị tham số lọc
         const params: any[] = [];
         if (topics) {
           params.push({ "?topics": topics });
@@ -2048,13 +2116,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Thêm giới hạn số lượng bản ghi
         params.push({ "?limit": limit.toString() });
         
+        // Thực hiện lệnh lấy logs
         const logs = await client.executeCommand('/log/print', params);
         
         console.log(`Đã tìm thấy ${logs.length} system logs từ thiết bị ${device.name}`);
         
+        // Định dạng lại logs để dễ hiển thị
+        const formattedLogs = logs.map((log: any) => ({
+          id: log['.id'] || '',
+          time: log.time || '',
+          topics: log.topics || '',
+          message: log.message || '',
+          severity: getSeverityFromTopics(log.topics || '')
+        }));
+        
         res.json({
           success: true,
-          data: logs
+          data: formattedLogs
         });
       } catch (err) {
         console.error(`Lỗi khi lấy system logs:`, err);
@@ -2062,6 +2140,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           success: false,
           message: `Lỗi khi lấy system logs: ${err instanceof Error ? err.message : String(err)}`
         });
+      } finally {
+        // Ngắt kết nối khi hoàn thành
+        await mikrotikService.disconnectFromDevice(deviceId);
       }
     } catch (error) {
       console.error(`Lỗi xử lý request:`, error);
@@ -2071,6 +2152,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     }
   });
+  
+  // Hàm hỗ trợ xác định mức độ nghiêm trọng dựa trên topics
+  function getSeverityFromTopics(topics: string): 'info' | 'warning' | 'error' | 'critical' {
+    const lowerTopics = topics.toLowerCase();
+    
+    if (lowerTopics.includes('critical') || lowerTopics.includes('error')) {
+      return 'critical';
+    } else if (lowerTopics.includes('warning')) {
+      return 'warning';
+    } else if (lowerTopics.includes('debug')) {
+      return 'info';
+    } else {
+      return 'info';
+    }
+  }
 
   // Endpoint phân tích lưu lượng theo giao thức
   router.get("/devices/:id/protocols", async (req: Request, res: Response) => {
