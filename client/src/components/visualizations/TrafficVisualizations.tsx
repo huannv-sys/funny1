@@ -70,6 +70,14 @@ interface AnomalyData {
   anomaly_type: string;
 }
 
+interface InterfaceStats {
+  name: string;
+  txBytes: number;
+  rxBytes: number;
+  totalBytes: number;
+  percentage: number;
+}
+
 const TrafficVisualizations: React.FC<TrafficVisualizationsProps> = ({
   deviceId,
   startDate,
@@ -84,6 +92,12 @@ const TrafficVisualizations: React.FC<TrafficVisualizationsProps> = ({
     queryKey: ['/api/devices', deviceId, 'traffic', timeRange],
     refetchInterval: refreshInterval,
     refetchOnWindowFocus: true,
+  });
+
+  // Fetch interface statistics data - REAL DATA
+  const { data: interfaceStatsData, isLoading: interfaceStatsLoading } = useQuery({
+    queryKey: ['/api/devices', deviceId, 'interface-stats'],
+    refetchInterval: refreshInterval,
   });
 
   // Fetch protocol distribution data
@@ -148,6 +162,19 @@ const TrafficVisualizations: React.FC<TrafficVisualizationsProps> = ({
       destination_ip: item.destinationIp,
       probability: item.probability,
       anomaly_type: item.anomalyType || "Unknown",
+    }));
+  };
+  
+  // Format interface statistics data for visualization - REAL DATA
+  const formatInterfaceStats = (): InterfaceStats[] => {
+    if (!interfaceStatsData?.data) return [];
+    
+    return interfaceStatsData.data.map((item: any) => ({
+      name: item.name,
+      txBytes: item.txBytes,
+      rxBytes: item.rxBytes,
+      totalBytes: item.totalBytes,
+      percentage: item.percentage
     }));
   };
 
@@ -324,6 +351,77 @@ const TrafficVisualizations: React.FC<TrafficVisualizationsProps> = ({
                       name="Tải lên (MB/s)"
                     />
                   </AreaChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Thống Kê Giao Diện Mạng</CardTitle>
+                <CardDescription>Lưu lượng theo giao diện (dữ liệu thực từ thiết bị)</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={400}>
+                  <PieChart>
+                    <Pie
+                      data={formatInterfaceStats()}
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={125}
+                      fill="#8884d8"
+                      dataKey="totalBytes"
+                      nameKey="name"
+                      label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(1)}%`}
+                    >
+                      {formatInterfaceStats().map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip 
+                      formatter={(value) => [
+                        `${(Number(value) / (1024*1024)).toFixed(2)} MB`, 
+                        'Lưu lượng'
+                      ]} 
+                    />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Lưu Lượng Giao Diện</CardTitle>
+                <CardDescription>Dữ liệu đã gửi và nhận theo giao diện (MB)</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={400}>
+                  <BarChart
+                    data={formatInterfaceStats().map(item => ({
+                      ...item,
+                      rxBytes: (item.rxBytes / (1024 * 1024)).toFixed(2), // Convert to MB
+                      txBytes: (item.txBytes / (1024 * 1024)).toFixed(2)  // Convert to MB
+                    }))}
+                    margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" />
+                    <YAxis />
+                    <Tooltip formatter={(value) => [`${value} MB`, 'Dung lượng']} />
+                    <Legend />
+                    <Bar
+                      dataKey="rxBytes"
+                      name="Dữ liệu nhận (MB)"
+                      fill="#0088FE"
+                    />
+                    <Bar
+                      dataKey="txBytes"
+                      name="Dữ liệu gửi (MB)"
+                      fill="#00C49F"
+                    />
+                  </BarChart>
                 </ResponsiveContainer>
               </CardContent>
             </Card>

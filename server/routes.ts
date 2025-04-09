@@ -2009,6 +2009,74 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Endpoint lấy thống kê giao diện từ thiết bị Mikrotik
+  router.get("/devices/:id/interface-stats", async (req: Request, res: Response) => {
+    try {
+      const deviceId = parseInt(req.params.id);
+      
+      // Lấy thông tin thiết bị
+      const device = await storage.getDevice(deviceId);
+      if (!device) {
+        return res.status(404).json({ message: "Thiết bị không tồn tại" });
+      }
+      
+      try {
+        // Khởi tạo Mikrotik service
+        const mikrotikService = new MikrotikService(device);
+        await mikrotikService.connect();
+        
+        // Lấy danh sách giao diện
+        const interfaces = await mikrotikService.getInterfaces();
+        
+        // Tính toán thống kê lưu lượng theo giao diện
+        const interfaceStats = interfaces.map(iface => {
+          const txBytes = parseInt(iface.txBytes || '0');
+          const rxBytes = parseInt(iface.rxBytes || '0');
+          const totalBytes = txBytes + rxBytes;
+          
+          return {
+            name: iface.name,
+            txBytes,
+            rxBytes,
+            totalBytes,
+            percentage: 0 // Sẽ được tính toán sau
+          };
+        });
+        
+        // Tính tổng lưu lượng
+        const totalTraffic = interfaceStats.reduce((sum, iface) => sum + iface.totalBytes, 0);
+        
+        // Cập nhật phần trăm cho mỗi giao diện
+        interfaceStats.forEach(iface => {
+          iface.percentage = totalTraffic > 0 ? (iface.totalBytes / totalTraffic) * 100 : 0;
+        });
+        
+        // Sắp xếp theo lưu lượng giảm dần và lấy top 5
+        const sortedStats = interfaceStats
+          .filter(iface => iface.totalBytes > 0)
+          .sort((a, b) => b.totalBytes - a.totalBytes)
+          .slice(0, 5);
+        
+        await mikrotikService.disconnect();
+        
+        res.json({
+          success: true,
+          data: sortedStats
+        });
+      } catch (error: any) {
+        console.error('Error fetching interface statistics:', error);
+        res.status(500).json({ 
+          message: `Lỗi khi lấy thông tin thống kê giao diện: ${error.message}` 
+        });
+      }
+    } catch (error: any) {
+      console.error('Error in interface stats endpoint:', error);
+      res.status(500).json({ 
+        message: `Lỗi khi xử lý yêu cầu: ${error.message}` 
+      });
+    }
+  });
+
 
 
   // Tuyến đường API trực tiếp (không qua router)
