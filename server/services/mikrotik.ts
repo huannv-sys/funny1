@@ -309,6 +309,10 @@ class MikrotikClient {
 import * as net from 'net';
 
 export class MikrotikService {
+  // Tạo một instance mới của MikrotikService
+  createClientInstance(): MikrotikService {
+    return new MikrotikService();
+  }
   private clients: Map<number, MikrotikClient> = new Map();
   
   /**

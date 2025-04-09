@@ -5,7 +5,8 @@ import { WebSocketServer, WebSocket } from 'ws';
 import * as RouterOS from 'routeros-client';
 import { storage } from "./storage";
 import { 
-  mikrotikService, 
+  mikrotikService,
+  MikrotikService,
   wirelessService, 
   capsmanService, 
   schedulerService, 
@@ -1546,15 +1547,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (device && device.length > 0) {
           // Use the existing mikrotikService instance
           try {
-            await mikrotikService.connect(device[0]);
-          } catch (err) {
-            console.error("Failed to connect to device:", err);
-          }
-          if (mikrotikService) {
+            // Tạo một client MikroTik mới
+            const mikrotikClient = mikrotikService.createClientInstance();
+            // Thiết lập thông tin kết nối
+            mikrotikClient.setConfig(
+              device[0].ipAddress,
+              device[0].username,
+              device[0].password,
+              8728
+            );
+            
+            // Kết nối đến thiết bị
+            const connected = await mikrotikClient.connect();
+            if (!connected) {
+              console.error("Không thể kết nối đến thiết bị:", device[0].ipAddress);
+              throw new Error("Không thể kết nối đến thiết bị");
+            }
+            
             // Lấy log firewall từ thiết bị
-            const firewallLogs = await mikrotikService.executeCommand('/log print where topics ~ "firewall"');
+            const firewallLogs = await mikrotikClient.executeCommand('/log/print', [
+              { "?topics": "firewall" }
+            ]);
             
             if (firewallLogs && firewallLogs.length > 0) {
+              console.log(`Đã tìm thấy ${firewallLogs.length} log firewall từ thiết bị ${device[0].name}`);
+              
               // Chuyển đổi dữ liệu firewall log thành định dạng của anomalies
               const realFirewallAnomalies = firewallLogs.map((log: any, index: number) => {
                 // Giả định log có định dạng: time="hh:mm:ss" topics="firewall,warning" message="input: in:ether1, out:(none), src-mac xx:xx:xx:xx:xx:xx, proto TCP (SYN), 192.168.1.x:xxxxx->192.168.1.x:xx, len 64"
@@ -1902,6 +1919,157 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({
         success: false,
         message: `Lỗi khi phân tích lưu lượng thực: ${error instanceof Error ? error.message : String(error)}`
+      });
+    }
+  });
+
+  // API lấy danh sách firewall filter rules từ thiết bị Mikrotik
+  router.get("/devices/:id/firewall/filter", async (req: Request, res: Response) => {
+    try {
+      const deviceId = parseInt(req.params.id);
+      
+      // Truy vấn thiết bị từ cơ sở dữ liệu
+      const deviceResults = await db.select().from(schema.devices).where(eq(schema.devices.id, deviceId)).limit(1);
+      
+      if (!deviceResults || deviceResults.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: `Không tìm thấy thiết bị với ID ${deviceId}`
+        });
+      }
+      
+      const device = deviceResults[0];
+      
+      // Tạo kết nối Mikrotik
+      const mikrotikClient = new MikrotikService();
+      mikrotikClient.setConfig(
+        device.ipAddress,
+        device.username,
+        device.password,
+        8728
+      );
+      
+      // Kết nối đến thiết bị
+      const connected = await mikrotikClient.connect();
+      if (!connected) {
+        return res.status(500).json({
+          success: false,
+          message: `Không thể kết nối đến thiết bị ${device.name} (${device.ipAddress})`
+        });
+      }
+      
+      // Lấy danh sách firewall filter rules
+      try {
+        const filterRules = await mikrotikClient.executeCommand('/ip/firewall/filter/print');
+        
+        console.log(`Đã tìm thấy ${filterRules.length} firewall filter rules từ thiết bị ${device.name}`);
+        
+        // Chuyển đổi dữ liệu để dễ sử dụng ở client
+        const formattedRules = filterRules.map((rule: any) => {
+          return {
+            id: rule['.id'] || '',
+            chain: rule['chain'] || '',
+            action: rule['action'] || '',
+            protocol: rule['protocol'] || 'any',
+            srcAddress: rule['src-address'] || '',
+            dstAddress: rule['dst-address'] || '',
+            srcPort: rule['src-port'] || '',
+            dstPort: rule['dst-port'] || '',
+            comment: rule['comment'] || '',
+            disabled: rule['disabled'] === 'true',
+            dynamic: rule['dynamic'] === 'true',
+            invalid: rule['invalid'] === 'true'
+          };
+        });
+        
+        res.json({
+          success: true,
+          data: formattedRules
+        });
+      } catch (err) {
+        console.error(`Lỗi khi lấy firewall filter rules:`, err);
+        res.status(500).json({
+          success: false,
+          message: `Lỗi khi lấy firewall filter rules: ${err instanceof Error ? err.message : String(err)}`
+        });
+      }
+    } catch (error) {
+      console.error(`Lỗi xử lý request:`, error);
+      res.status(500).json({
+        success: false,
+        message: `Lỗi xử lý request: ${error instanceof Error ? error.message : String(error)}`
+      });
+    }
+  });
+  
+  // API lấy system log từ thiết bị Mikrotik
+  router.get("/devices/:id/system-logs", async (req: Request, res: Response) => {
+    try {
+      const deviceId = parseInt(req.params.id);
+      const topics = req.query.topics as string || '';
+      const limit = parseInt(req.query.limit as string || '100');
+      
+      // Truy vấn thiết bị từ cơ sở dữ liệu
+      const deviceResults = await db.select().from(schema.devices).where(eq(schema.devices.id, deviceId)).limit(1);
+      
+      if (!deviceResults || deviceResults.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: `Không tìm thấy thiết bị với ID ${deviceId}`
+        });
+      }
+      
+      const device = deviceResults[0];
+      
+      // Tạo kết nối Mikrotik
+      const mikrotikClient = new MikrotikService();
+      mikrotikClient.setConfig(
+        device.ipAddress,
+        device.username,
+        device.password,
+        8728
+      );
+      
+      // Kết nối đến thiết bị
+      const connected = await mikrotikClient.connect();
+      if (!connected) {
+        return res.status(500).json({
+          success: false,
+          message: `Không thể kết nối đến thiết bị ${device.name} (${device.ipAddress})`
+        });
+      }
+      
+      // Lấy system logs
+      try {
+        // Chuẩn bị tham số để lọc theo topics nếu có yêu cầu
+        const params: any[] = [];
+        if (topics) {
+          params.push({ "?topics": topics });
+        }
+        
+        // Thêm giới hạn số lượng bản ghi
+        params.push({ "?limit": limit.toString() });
+        
+        const logs = await mikrotikClient.executeCommand('/log/print', params);
+        
+        console.log(`Đã tìm thấy ${logs.length} system logs từ thiết bị ${device.name}`);
+        
+        res.json({
+          success: true,
+          data: logs
+        });
+      } catch (err) {
+        console.error(`Lỗi khi lấy system logs:`, err);
+        res.status(500).json({
+          success: false,
+          message: `Lỗi khi lấy system logs: ${err instanceof Error ? err.message : String(err)}`
+        });
+      }
+    } catch (error) {
+      console.error(`Lỗi xử lý request:`, error);
+      res.status(500).json({
+        success: false,
+        message: `Lỗi xử lý request: ${error instanceof Error ? error.message : String(error)}`
       });
     }
   });
